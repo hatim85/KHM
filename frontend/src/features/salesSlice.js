@@ -8,6 +8,7 @@ export const fetchSales = createAsyncThunk(
       const params = new URLSearchParams();
       if (filters?.stream) params.append('stream', filters.stream);
       if (filters?.status) params.append('status', filters.status);
+      if (filters?.paymentStatus) params.append('paymentStatus', filters.paymentStatus);
       
       const response = await api.get(`/sales?${params.toString()}`);
       return response.data.data;
@@ -25,6 +26,30 @@ export const createSale = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to create sale bill');
+    }
+  }
+);
+
+export const convertEstimate = createAsyncThunk(
+  'sales/convertEstimate',
+  async (estimateId, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/sales/${estimateId}/convert`);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to convert estimate');
+    }
+  }
+);
+
+export const cancelSale = createAsyncThunk(
+  'sales/cancel',
+  async (saleId, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/sales/${saleId}/cancel`);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to cancel sale');
     }
   }
 );
@@ -67,6 +92,30 @@ const salesSlice = createSlice({
         state.createSuccess = true;
       })
       .addCase(createSale.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(convertEstimate.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(convertEstimate.fulfilled, (state) => {
+        state.loading = false;
+      })
+      .addCase(convertEstimate.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(cancelSale.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(cancelSale.fulfilled, (state, action) => {
+        state.loading = false;
+        const idx = state.data.findIndex((s) => s._id === action.payload._id);
+        if (idx >= 0) state.data[idx] = action.payload;
+      })
+      .addCase(cancelSale.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });

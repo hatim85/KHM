@@ -19,6 +19,7 @@ import TaxBills from './pages/TaxBills';
 import NewTaxBill from './pages/NewTaxBill';
 import StockMovements from './pages/StockMovements';
 import Payments from './pages/Payments';
+import Returns from './pages/Returns';
 import LedgerView from './pages/LedgerView';
 import MasterAttributes from './pages/MasterAttributes';
 import Expenses from './pages/Expenses';
@@ -70,6 +71,7 @@ function App() {
           <Route path="customers" element={<Customers />} />
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="payments" element={<Payments />} />
+          <Route path="returns" element={<Returns />} />
           <Route path="ledger/:partyType/:partyId" element={<LedgerView />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="reports" element={<Reports />} />

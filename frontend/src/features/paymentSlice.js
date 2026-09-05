@@ -20,8 +20,16 @@ export const createPayment = createAsyncThunk('payments/create', async (payload,
   }
 });
 
-export const fetchUnpaidInvoices = createAsyncThunk('payments/unpaidInvoices', async (filters, { rejectWithValue }) => {
+export const reversePayment = createAsyncThunk('payments/reverse', async (paymentId, { rejectWithValue }) => {
   try {
+    const { data } = await api.post(`/payments/${paymentId}/reverse`);
+    return data.data;
+  } catch (err) {
+    return rejectWithValue(err.response?.data?.message || 'Failed to reverse payment');
+  }
+});
+
+export const fetchUnpaidInvoices = createAsyncThunk('payments/unpaidInvoices', async (filters, { rejectWithValue }) => {  try {
     const params = new URLSearchParams(filters).toString();
     const { data } = await api.get(`/payments/unpaid?${params}`);
     return data.data;
@@ -71,6 +79,14 @@ const paymentSlice = createSlice({
       .addCase(createPayment.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(createPayment.fulfilled, (state, action) => { state.loading = false; state.data.unshift(action.payload); })
       .addCase(createPayment.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+
+      .addCase(reversePayment.pending, (state) => { state.loading = true; state.error = null; })
+      .addCase(reversePayment.fulfilled, (state, action) => {
+        state.loading = false;
+        const idx = state.data.findIndex((p) => p._id === action.payload._id);
+        if (idx >= 0) state.data[idx] = action.payload;
+      })
+      .addCase(reversePayment.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
 
       .addCase(fetchUnpaidInvoices.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchUnpaidInvoices.fulfilled, (state, action) => { state.loading = false; state.unpaidInvoices = action.payload; })

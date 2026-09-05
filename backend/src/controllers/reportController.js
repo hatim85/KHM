@@ -4,6 +4,7 @@ import Purchase from '../models/Purchase.js';
 import Expense from '../models/Expense.js';
 import Product from '../models/Product.js';
 import StockMovement from '../models/StockMovement.js';
+import Return from '../models/Return.js';
 import CustomerLedger from '../models/CustomerLedger.js';
 import SupplierLedger from '../models/SupplierLedger.js';
 import Payment from '../models/Payment.js';
@@ -32,23 +33,41 @@ export const getProfitAndLoss = async (req, res, next) => {
     const dateMatch = getDateMatch(startDate, endDate, 'invoiceDate');
     const expenseDateMatch = getDateMatch(startDate, endDate, 'date');
 
-    // Net Sales (TAX Invoices Only, Excluding Cancelled)
+    // Net Sales (TAX Invoices Only, Excluding Cancelled, Net of Sales Returns)
     const salesAgg = await Sale.aggregate([
       { $match: { ...dateMatch, transactionType: 'TAX', status: 'COMPLETED' } },
       { $group: { _id: null, totalSales: { $sum: '$subTotal' } } }
     ]);
-    const netSales = salesAgg[0]?.totalSales || 0;
+    const grossSales = salesAgg[0]?.totalSales || 0;
 
-    // COGS
-    const cogsAgg = await Sale.aggregate([
-      { $match: { ...dateMatch, transactionType: 'TAX', status: 'COMPLETED' } },
-      { $unwind: '$items' },
-      { $lookup: { from: 'products', localField: 'items.product', foreignField: '_id', as: 'productDoc' } },
-      { $unwind: '$productDoc' },
-      { $project: { cogsItem: { $multiply: ['$items.quantity', '$productDoc.purchasePrice'] } } },
+    const returnDateMatch = getDateMatch(startDate, endDate, 'returnDate');
+    const salesReturnAgg = await Return.aggregate([
+      { $match: { ...returnDateMatch, returnType: 'SALES_RETURN', stream: 'TAX' } },
+      { $group: { _id: null, totalReturns: { $sum: '$subTotal' } } }
+    ]);
+    const salesReturns = salesReturnAgg[0]?.totalReturns || 0;
+    const netSales = Math.max(0, grossSales - salesReturns);
+
+    // COGS from the stock movement ledger: TAX OUT issues valued at the
+    // carrying average cost recorded at issue time. Cancelled sales excluded.
+    // (Conversion-created TAX invoices intentionally carry no OUT movement —
+    // goods were already issued via the source estimate; see convertEstimateToTax.)
+    const cogsAgg = await StockMovement.aggregate([
+      { $match: { ...getDateMatch(startDate, endDate, 'createdAt'), type: 'OUT', stream: 'TAX', referenceModel: 'Sale' } },
+      { $lookup: { from: 'sales', localField: 'referenceDocument', foreignField: '_id', as: 'saleDoc' } },
+      { $unwind: { path: '$saleDoc', preserveNullAndEmptyArrays: true } },
+      { $match: { 'saleDoc.status': { $ne: 'CANCELLED' } } },
+      { $project: { cogsItem: { $multiply: [{ $abs: '$quantity' }, { $ifNull: ['$unitCost', 0] }] } } },
       { $group: { _id: null, totalCOGS: { $sum: '$cogsItem' } } }
     ]);
-    const cogs = cogsAgg[0]?.totalCOGS || 0;
+    // Sales-return IN movements carry the carrying cost back into stock —
+    // net them so returned goods don't inflate COGS.
+    const returnCogsAgg = await StockMovement.aggregate([
+      { $match: { ...getDateMatch(startDate, endDate, 'createdAt'), type: 'IN', stream: 'TAX', referenceModel: 'Return' } },
+      { $project: { cogsItem: { $multiply: [{ $abs: '$quantity' }, { $ifNull: ['$unitCost', 0] }] } } },
+      { $group: { _id: null, totalReturnCOGS: { $sum: '$cogsItem' } } }
+    ]);
+    const cogs = Math.max(0, Math.round(cogsAgg[0]?.totalCOGS || 0) - Math.round(returnCogsAgg[0]?.totalReturnCOGS || 0));
 
     const grossProfit = netSales - cogs;
 
@@ -63,7 +82,7 @@ export const getProfitAndLoss = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { netSales, cogs, grossProfit, totalExpenses, netProfit }
+      data: { netSales, grossSales, salesReturns, cogs, grossProfit, totalExpenses, netProfit }
     });
   } catch (error) { next(error); }
 };
@@ -88,6 +107,26 @@ export const getGstSummary = async (req, res, next) => {
       }}
     ]);
     const output = salesGst[0] || { taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+
+    // Net sales returns (TAX stream): GST reversal reduces output tax.
+    const returnDateMatch = getDateMatch(startDate, endDate, 'returnDate');
+    const salesReturnGst = await Return.aggregate([
+      { $match: { ...returnDateMatch, returnType: 'SALES_RETURN', stream: 'TAX' } },
+      { $group: {
+          _id: null,
+          taxableValue: { $sum: '$subTotal' },
+          cgst: { $sum: '$totalCgst' },
+          sgst: { $sum: '$totalSgst' },
+          igst: { $sum: '$totalIgst' },
+      }}
+    ]);
+    const retOut = salesReturnGst[0] || { taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+    // Clamped at zero: range slicing can place a return inside the window
+    // while its original sale sits outside it.
+    output.taxableValue = Math.max(0, output.taxableValue - retOut.taxableValue);
+    output.cgst = Math.max(0, output.cgst - retOut.cgst);
+    output.sgst = Math.max(0, output.sgst - retOut.sgst);
+    output.igst = Math.max(0, output.igst - retOut.igst);
     const totalOutputGst = output.cgst + output.sgst + output.igst;
 
     // Input Tax Credit (TAX Purchases)
@@ -100,6 +139,19 @@ export const getGstSummary = async (req, res, next) => {
       }}
     ]);
     const input = purchaseGst[0] || { taxableValue: 0, totalTax: 0 };
+
+    // Net purchase returns (TAX stream): ITC reversal reduces input credit.
+    const purchaseReturnGst = await Return.aggregate([
+      { $match: { ...returnDateMatch, returnType: 'PURCHASE_RETURN', stream: 'TAX' } },
+      { $group: {
+          _id: null,
+          taxableValue: { $sum: '$subTotal' },
+          totalTax: { $sum: { $add: ['$totalCgst', '$totalSgst', '$totalIgst'] } },
+      }}
+    ]);
+    const retIn = purchaseReturnGst[0] || { taxableValue: 0, totalTax: 0 };
+    input.taxableValue = Math.max(0, input.taxableValue - retIn.taxableValue);
+    input.totalTax = Math.max(0, input.totalTax - retIn.totalTax);
     const totalItc = input.totalTax;
 
     const netLiability = totalOutputGst - totalItc;
@@ -124,16 +176,23 @@ export const getStockValuation = async (req, res, next) => {
     
     let totalValue = 0;
     const items = products.map(p => {
-      const currentStock = p.taxStock + p.estimateStock; // Physical stock
-      const value = currentStock * (p.purchasePrice || 0);
+      const taxQty = p.taxStock || 0;
+      const estQty = p.estimateStock || 0;
+      const taxValue = taxQty * (p.averageCostTax || 0);
+      const estValue = estQty * (p.averageCostEst || 0);
+      const value = taxValue + estValue; // per-pool WAC valuation
       totalValue += value;
       return {
         _id: p._id,
         name: p.name,
         sku: p.sku,
-        quantity: currentStock,
+        quantity: taxQty + estQty,
+        taxStock: taxQty,
+        estimateStock: estQty,
         unit: p.unit?.shortName || '',
-        averageCost: p.purchasePrice,
+        averageCost: taxQty + estQty > 0 ? Math.round(value / (taxQty + estQty)) : 0,
+        averageCostTax: p.averageCostTax || 0,
+        averageCostEst: p.averageCostEst || 0,
         value
       };
     });

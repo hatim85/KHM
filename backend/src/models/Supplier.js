@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { isValidStateCode, normalizeGstin, normalizeStateCode } from '../utils/gstMaster.js';
 
 const supplierSchema = new mongoose.Schema({
   name: {
@@ -10,7 +11,20 @@ const supplierSchema = new mongoose.Schema({
   gstin: {
     type: String,
     trim: true,
+    uppercase: true,
     default: '',
+    // Optional free text — deliberately NOT format-validated (owner's rule).
+  },
+  stateCode: {
+    type: String,
+    trim: true,
+    default: '24', // Default to local state (Gujarat); drives intra/inter-state ITC decisions
+    validate: {
+      validator(v) {
+        return isValidStateCode(v);
+      },
+      message: 'State code is invalid. Use a 2-digit GST state code.',
+    },
   },
   phone: {
     type: String,
@@ -33,6 +47,11 @@ const supplierSchema = new mongoose.Schema({
     default: true,
   },
 }, { timestamps: true });
+
+supplierSchema.pre('save', function () {
+  if (this.gstin) this.gstin = normalizeGstin(this.gstin);
+  if (this.stateCode) this.stateCode = normalizeStateCode(this.stateCode);
+});
 
 const Supplier = mongoose.model('Supplier', supplierSchema);
 export default Supplier;

@@ -27,7 +27,11 @@ const purchaseItemSchema = new mongoose.Schema({
   total: {
     type: Number,
     required: true, // (rate * qty) + taxAmount. Stored in paise.
-  }
+  },
+  // Historical snapshots at finalization — old documents never depend on live masters.
+  productName: { type: String, default: '' },
+  sku: { type: String, default: '' },
+  hsnCode: { type: String, default: '' },
 });
 
 const purchaseSchema = new mongoose.Schema({
@@ -69,6 +73,13 @@ const purchaseSchema = new mongoose.Schema({
     default: 0,
     min: 0,
   },
+  // Cumulative value credited back via Return documents (paise).
+  // Outstanding = grandTotal - amountPaid - returnedAmount.
+  returnedAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   paymentStatus: {
     type: String,
     enum: ['UNPAID', 'PARTIAL', 'PAID'],
@@ -82,6 +93,22 @@ const purchaseSchema = new mongoose.Schema({
   remarks: {
     type: String,
     default: '',
+  },
+  // Historical snapshot at finalization.
+  supplierSnapshot: {
+    name: { type: String, default: '' },
+    gstin: { type: String, default: '' },
+    address: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    stateCode: { type: String, default: '' },
+  },
+  // Duplicate-submission guard (§33). Client-supplied `Idempotency-Key` header.
+  // No default: the field must be ABSENT (not null) when unused, because
+  // sparse indexes still index explicit nulls.
+  idempotencyKey: {
+    type: String,
+    sparse: true,
+    unique: true,
   }
 }, { timestamps: true });
 

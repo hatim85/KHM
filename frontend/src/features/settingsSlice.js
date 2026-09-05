@@ -29,6 +29,33 @@ export const updateSettings = createAsyncThunk(
   }
 );
 
+export const updateBusinessSettings = createAsyncThunk(
+  'settings/updateBusinessSettings',
+  async (businessData, { rejectWithValue }) => {
+    try {
+      const response = await api.put('/settings/business', businessData);
+      return { data: response.data.data, section: 'business' };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to update business details'
+      );
+    }
+  }
+);
+
+export const updateSequenceSettings = createAsyncThunk(
+  'settings/updateSequenceSettings',
+  async (sequenceData, { rejectWithValue }) => {
+    try {
+      const response = await api.put('/settings/sequences', sequenceData);
+      return { data: response.data.data, section: 'sequences' };
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to update document sequences'
+      );
+    }
+  }
+);
 export const triggerBackup = createAsyncThunk(
   'settings/triggerBackup',
   async (_, { rejectWithValue }) => {
@@ -91,6 +118,36 @@ const settingsSlice = createSlice({
         state.updateSuccess = true;
       })
       .addCase(updateSettings.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Update business details (independent lifecycle)
+      .addCase(updateBusinessSettings.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+        state.updateSuccess = false;
+      })
+      .addCase(updateBusinessSettings.fulfilled, (state, action) => {
+        state.loading = false;
+        state.data = action.payload.data;
+        state.updateSuccess = true;
+      })
+      .addCase(updateBusinessSettings.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      // Update document sequences (independent lifecycle, admin-only)
+      .addCase(updateSequenceSettings.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+        state.updateSuccess = false;
+      })
+      .addCase(updateSequenceSettings.fulfilled, (state, action) => {
+        state.loading = false;
+        state.data = action.payload.data;
+        state.updateSuccess = true;
+      })
+      .addCase(updateSequenceSettings.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

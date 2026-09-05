@@ -144,13 +144,13 @@ export const runDatabaseBackup = async (userId) => {
     fs.unlinkSync(localFilePath);
     console.log('[Backup] Local temporary file removed.');
 
-    // 6. Log success to Audit
+    // 6. Log success to Audit (SYSTEM actor when triggered by cron)
     await AuditLog.create({
-      user: userId,
+      user: userId || null,
       action: 'BACKUP_COMPLETED',
       entity: 'System',
-      summary: `Automated backup uploaded to Google Drive: ${fileName}`,
-      metadata: { fileId: uploadRes.data.id, fileName },
+      summary: `${userId ? 'Manual' : 'Automated'} backup uploaded to Google Drive: ${fileName}`,
+      metadata: { fileId: uploadRes.data.id, fileName, actor: userId ? 'USER' : 'SYSTEM' },
       ipAddress: '127.0.0.1'
     });
 
@@ -167,7 +167,7 @@ export const runDatabaseBackup = async (userId) => {
       entity: 'System',
       user: null,
       summary: `Automated backup failed: ${error.message}`,
-      metadata: { error: error.message },
+      metadata: { error: error.message, actor: 'SYSTEM' },
       ipAddress: '127.0.0.1'
     }).catch(() => {});
 
@@ -175,14 +175,16 @@ export const runDatabaseBackup = async (userId) => {
   }
 };
 
-const cleanupOldDriveBackups = async (drive) => {
+export const cleanupOldDriveBackups = async (drive) => {
   try {
     console.log(`[Backup] Checking for Google Drive backups older than ${RETENTION_DAYS} days...`);
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - RETENTION_DAYS);
     const cutoffString = cutoffDate.toISOString();
 
-    const q = `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and createdTime < '${cutoffString}' and trashed = false`;
+    // Scoped to files this application owns: only our backup prefix, never
+    // arbitrary user files in the folder.
+    const q = `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and name contains 'khm-db-backup-' and createdTime < '${cutoffString}' and trashed = false`;
     
     const res = await drive.files.list({
       q: q,

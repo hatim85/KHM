@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
+import { ClipboardListIcon, TagIcon, AlertTriangleIcon, CheckIcon, PlusIcon, XIcon } from '../components/icons';
 import { productThunks, categoryThunks, brandThunks, unitThunks } from '../features/masterDataSlice';
 import { adjustStock, resetAdjustSuccess, fetchLowStock } from '../features/inventorySlice';
 
@@ -21,6 +22,7 @@ const Products = () => {
     sku: '',
     name: '',
     description: '',
+    specification: '',
     category: '',
     brand: '',
     unit: '',
@@ -57,6 +59,7 @@ const Products = () => {
         sku: product.sku || '',
         name: product.name,
         description: product.description || '',
+        specification: product.specification || '',
         category: product.category?._id || '',
         brand: product.brand?._id || '',
         unit: product.unit?._id || '',
@@ -70,7 +73,7 @@ const Products = () => {
     } else {
       setEditingId(null);
       setFormData({
-        sku: '', name: '', description: '', category: '', brand: '', unit: '',
+        sku: '', name: '', description: '', specification: '', category: '', brand: '', unit: '',
         hsnCode: '', purchasePrice: '', sellingPrice: '', gstRate: 0, reorderLevel: 10, isActive: true
       });
     }
@@ -98,7 +101,7 @@ const Products = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this product?')) {
+    if (window.confirm('Archive this product instead of deleting? Deletion is blocked when history exists. Use Edit to deactivate. Delete only unreferenced items.')) {
       await dispatch(productThunks.remove(id));
     }
   };
@@ -122,18 +125,18 @@ const Products = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Products Master</h1>
-          <p className="text-slate-400 text-sm mt-1">Manage items, pricing, and categorizations.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Products Master</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage items, pricing, and categorizations.</p>
         </div>
         <div className="flex gap-2">
-          <Link to="/inventory/movements" className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2">
-            📋 Stock Ledger
+          <Link to="/inventory/movements" className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2">
+            <ClipboardListIcon size={16} /> Stock Ledger
           </Link>
-          <Link to="/inventory/master" className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2">
-            🏷️ Categories
+          <Link to="/inventory/master" className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2">
+            <TagIcon size={16} /> Categories
           </Link>
           <button onClick={() => openModal()} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2">
-            <span>+</span> Add Product
+            <PlusIcon size={16} /> Add Product
           </button>
         </div>
       </div>
@@ -142,14 +145,14 @@ const Products = () => {
       {lowStock.length > 0 && (
         <div className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-rose-400 text-lg">⚠️</span>
-            <h3 className="text-sm font-bold text-rose-300">Low Stock Alerts ({lowStock.length} items)</h3>
+            <span className="text-rose-600 dark:text-rose-400"><AlertTriangleIcon size={18} /></span>
+            <h3 className="text-sm font-bold text-rose-600 dark:text-rose-300">Low Stock Alerts ({lowStock.length} items)</h3>
           </div>
           <div className="flex flex-wrap gap-2">
             {lowStock.map(item => (
               <div key={item._id} className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-1.5 text-xs">
-                <span className="text-rose-300 font-medium">{item.name}</span>
-                <span className="text-rose-400/70 ml-2">
+                <span className="text-rose-600 dark:text-rose-300 font-medium">{item.name}</span>
+                <span className="text-rose-500 dark:text-rose-400/70 ml-2">
                   {item.totalStock} / {item.reorderLevel} {item.unitName}
                 </span>
               </div>
@@ -158,71 +161,106 @@ const Products = () => {
         </div>
       )}
 
-      {adjustSuccess && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2">
-          <span className="text-emerald-400">✓</span>
-          <p className="text-sm text-emerald-400">Stock adjusted successfully.</p>
+      {/* Negative stock can only come from pre-guard history or a direct
+          write — new sales, returns and adjustments can no longer cause it. */}
+      {products.some((p) => ((p.taxStock ?? 0) + (p.estimateStock ?? 0)) < 0) && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex gap-3">
+          <span className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5"><AlertTriangleIcon size={20} /></span>
+          <div>
+            <h3 className="text-sm font-bold text-rose-600 dark:text-rose-300">
+              Negative stock detected: {products.filter((p) => ((p.taxStock ?? 0) + (p.estimateStock ?? 0)) < 0).map((p) => `${p.name} (${(p.taxStock ?? 0) + (p.estimateStock ?? 0)})`).join(', ')}
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+              This predates the stock guards (or came from outside the bill flow). Open Stock Ledger filtered by the product to trace every movement, do a physical count, then correct it with Adjust — the correction is audit-logged.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden">
+      {adjustSuccess && (
+        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2">
+          <span className="text-emerald-600 dark:text-emerald-400"><CheckIcon size={16} /></span>
+          <p className="text-sm text-emerald-600 dark:text-emerald-400">Stock adjusted successfully.</p>
+        </div>
+      )}
+
+      {/* Table — one column per attribute, no merged cells */}
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1400px]">
             <thead>
-              <tr className="bg-slate-800/40 border-b border-slate-800">
-                <th className="py-4 px-6 text-xs font-semibold text-slate-400 uppercase tracking-wider">Item Name / SKU</th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-400 uppercase tracking-wider">Category & Brand</th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-400 uppercase tracking-wider">Selling Price</th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Current Stock</th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Actions</th>
+              <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Item Name</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Specification</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">SKU</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Category</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Brand</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unit</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">HSN</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">GST %</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Purchase ₹</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Selling ₹</th>
+                <th className="py-4 px-4 text-xs font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider text-right">TAX Stock</th>
+                <th className="py-4 px-4 text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider text-right">EST Stock</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Total</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Reorder</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {productsLoading && products.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">Loading products...</td>
+                  <td colSpan="15" className="py-8 text-center text-slate-500 text-sm">Loading products...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">No products found.</td>
+                  <td colSpan="15" className="py-8 text-center text-slate-500 text-sm">No products found.</td>
                 </tr>
               ) : (
                 products.map((product) => {
-                  const totalStock = (product.taxStock || 0) + (product.estimateStock || 0);
+                  const taxStock = product.taxStock ?? 0;
+                  const estStock = product.estimateStock ?? 0;
+                  const totalStock = taxStock + estStock;
                   const isLow = totalStock < (product.reorderLevel ?? 10);
+                  const isNeg = totalStock < 0;
                   return (
-                    <tr key={product._id} className={`hover:bg-slate-800/20 transition ${isLow ? 'bg-rose-500/5' : ''}`}>
-                      <td className="py-4 px-6">
+                    <tr key={product._id} className={`hover:bg-slate-100 dark:hover:bg-slate-800/20 transition ${(isLow || isNeg) ? 'bg-rose-500/5' : ''}`}>
+                      <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-slate-200">{product.name}</p>
-                          {isLow && <span className="text-[10px] bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded font-bold">LOW</span>}
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{product.name}</p>
+                          {isLow && !isNeg && <span className="text-[10px] bg-rose-500/20 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded font-bold">LOW</span>}
+                          {isNeg && <span className="text-[10px] bg-rose-600 text-white px-1.5 py-0.5 rounded font-bold">NEGATIVE</span>}
                         </div>
-                        {product.sku && <p className="text-xs text-slate-500 font-mono mt-0.5">{product.sku}</p>}
                       </td>
-                      <td className="py-4 px-6">
-                        <p className="text-sm text-slate-400">{product.category?.name || '—'}</p>
-                        <p className="text-xs text-slate-500">{product.brand?.name || '—'}</p>
+                      <td className="py-4 px-4 text-xs text-slate-500 font-medium">{product.specification || '—'}</td>
+                      <td className="py-4 px-4 text-xs text-slate-500 font-mono">{product.sku || '—'}</td>
+                      <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">{product.category?.name || '—'}</td>
+                      <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">{product.brand?.name || '—'}</td>
+                      <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">{product.unit ? `${product.unit.name || ''} (${product.unit.shortName || ''})` : '—'}</td>
+                      <td className="py-4 px-4 text-xs text-slate-500 font-mono">{product.hsnCode || '—'}</td>
+                      <td className="py-4 px-4 text-sm text-right text-slate-600 dark:text-slate-300 font-mono">{product.gstRate ?? 0}%</td>
+                      <td className="py-4 px-4 text-sm text-right text-slate-600 dark:text-slate-300 font-mono">₹{(product.purchasePrice / 100).toFixed(2)}</td>
+                      <td className="py-4 px-4 text-sm text-right font-medium text-emerald-600 dark:text-emerald-400 font-mono">₹{(product.sellingPrice / 100).toFixed(2)}</td>
+                      <td className="py-4 px-4 text-right" title={`Avg cost ₹${((product.averageCostTax || 0) / 100).toFixed(2)}`}>
+                        <span className="text-sm font-bold text-indigo-600 dark:text-indigo-300 font-mono">{taxStock}</span>
+                        <span className="block text-[10px] text-slate-500 font-mono">avg ₹{((product.averageCostTax || 0) / 100).toFixed(2)}</span>
                       </td>
-                      <td className="py-4 px-6">
-                        <p className="text-sm font-medium text-emerald-400">₹{(product.sellingPrice / 100).toFixed(2)}</p>
-                        <span className="font-mono text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded mt-1 inline-block">
-                          GST: {product.gstRate}%
+                      <td className="py-4 px-4 text-right" title={`Avg cost ₹${((product.averageCostEst || 0) / 100).toFixed(2)}`}>
+                        <span className="text-sm font-bold text-amber-600 dark:text-amber-300 font-mono">{estStock}</span>
+                        <span className="block text-[10px] text-slate-500 font-mono">avg ₹{((product.averageCostEst || 0) / 100).toFixed(2)}</span>
+                      </td>
+                      <td className={`py-4 px-4 text-sm text-right font-bold font-mono ${isNeg || isLow ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>{totalStock}</td>
+                      <td className="py-4 px-4 text-sm text-right text-slate-500 font-mono">{product.reorderLevel ?? 10}</td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${product.isActive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-500/10 text-slate-500'}`}>
+                          {product.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="py-4 px-6">
-                        <div className="flex flex-col items-center justify-center gap-1">
-                          <span className={`text-sm font-bold ${isLow ? 'text-rose-400' : 'text-white'}`}>{totalStock} {product.unit?.shortName}</span>
-                          <div className="flex items-center gap-2 text-[10px] font-mono mt-0.5">
-                            <span className="text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded">TAX: {product.taxStock || 0}</span>
-                            <span className="text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded">EST: {product.estimateStock || 0}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-right">
-                        <button onClick={() => openAdjustModal(product)} className="text-blue-400 hover:text-blue-300 text-sm font-medium mr-3 transition">Adjust</button>
-                        <button onClick={() => openModal(product)} className="text-indigo-400 hover:text-indigo-300 text-sm font-medium mr-3 transition">Edit</button>
-                        <button onClick={() => handleDelete(product._id)} className="text-rose-400 hover:text-rose-300 text-sm font-medium transition">Delete</button>
+                      <td className="py-4 px-4 text-right">
+                        <button onClick={() => openAdjustModal(product)} className="text-blue-600 dark:text-blue-400 hover:text-blue-300 text-sm font-medium mr-3 transition">Adjust</button>
+                        <button onClick={() => openModal(product)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-300 text-sm font-medium mr-3 transition">Edit</button>
+                        <button onClick={() => handleDelete(product._id)} className="text-rose-600 dark:text-rose-400 hover:text-rose-300 text-sm font-medium transition">Delete</button>
                       </td>
                     </tr>
                   );
@@ -236,56 +274,61 @@ const Products = () => {
       {/* Product Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl my-8 relative">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-900/90 backdrop-blur-md z-10 rounded-t-3xl">
-              <h2 className="text-lg font-bold text-white">{editingId ? 'Edit Product' : 'Add Product'}</h2>
-              <button type="button" onClick={closeModal} className="text-slate-400 hover:text-white">&times;</button>
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl my-8 relative">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md z-10 rounded-t-3xl">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Edit Product' : 'Add Product'}</h2>
+              <button type="button" onClick={closeModal} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
             </div>
             
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Product Name *</label>
-                  <input required type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none" />
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Product Name *</label>
+                  <input required type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Specification (prints on sales bills)</label>
+                  <input type="text" value={formData.specification} onChange={(e) => setFormData({...formData, specification: e.target.value})} placeholder="e.g. 12mm chuck, 5m coil, 220V" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">SKU / Item Code</label>
-                  <input type="text" value={formData.sku} onChange={(e) => setFormData({...formData, sku: e.target.value.toUpperCase()})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none" />
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">SKU / Item Code</label>
+                  <input type="text" value={formData.sku} onChange={(e) => setFormData({...formData, sku: e.target.value.toUpperCase()})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">HSN Code</label>
-                  <input type="text" value={formData.hsnCode} onChange={(e) => setFormData({...formData, hsnCode: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white font-mono outline-none" />
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">HSN Code</label>
+                  <input type="text" value={formData.hsnCode} onChange={(e) => setFormData({...formData, hsnCode: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Category</label>
-                  <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none appearance-none">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Category</label>
+                  <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
                     <option value="">Select Category</option>
                     {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Brand</label>
-                  <select value={formData.brand} onChange={(e) => setFormData({...formData, brand: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none appearance-none">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Brand</label>
+                  <select value={formData.brand} onChange={(e) => setFormData({...formData, brand: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
                     <option value="">Select Brand</option>
                     {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Unit *</label>
-                  <select required value={formData.unit} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none appearance-none">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Unit *</label>
+                  <select required value={formData.unit} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
                     <option value="">Select Unit</option>
                     {units.map(u => <option key={u._id} value={u._id}>{u.name} ({u.shortName})</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">GST Rate (%)</label>
-                  <select value={formData.gstRate} onChange={(e) => setFormData({...formData, gstRate: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none appearance-none">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">GST Rate (%)</label>
+                  <select value={formData.gstRate} onChange={(e) => setFormData({...formData, gstRate: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
                     <option value="0">0% (Nil Rated)</option>
                     <option value="5">5%</option>
                     <option value="12">12%</option>
@@ -295,30 +338,30 @@ const Products = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Purchase Price (₹)</label>
-                  <input type="number" step="0.01" min="0" value={formData.purchasePrice} onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none" />
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Purchase Price (₹)</label>
+                  <input type="number" step="0.01" min="0" value={formData.purchasePrice} onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Selling Price (₹) *</label>
-                  <input required type="number" step="0.01" min="0" value={formData.sellingPrice} onChange={(e) => setFormData({...formData, sellingPrice: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none" />
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Selling Price (₹) *</label>
+                  <input required type="number" step="0.01" min="0" value={formData.sellingPrice} onChange={(e) => setFormData({...formData, sellingPrice: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Reorder Level</label>
-                  <input type="number" min="0" value={formData.reorderLevel} onChange={(e) => setFormData({...formData, reorderLevel: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none" />
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Reorder Level</label>
+                  <input type="number" min="0" value={formData.reorderLevel} onChange={(e) => setFormData({...formData, reorderLevel: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
                   <p className="text-[10px] text-slate-500 mt-1">Alert when total stock drops below this level.</p>
                 </div>
 
                 <div className="sm:col-span-2 flex items-center gap-2 pt-2">
-                  <input type="checkbox" id="isActive" checked={formData.isActive} onChange={(e) => setFormData({...formData, isActive: e.target.checked})} className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500" />
-                  <label htmlFor="isActive" className="text-sm text-slate-300 font-medium">Active Product</label>
+                  <input type="checkbox" id="isActive" checked={formData.isActive} onChange={(e) => setFormData({...formData, isActive: e.target.checked})} className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-indigo-600 focus:ring-indigo-500" />
+                  <label htmlFor="isActive" className="text-sm text-slate-600 dark:text-slate-300 font-medium">Active Product</label>
                 </div>
 
               </div>
 
-              <div className="pt-6 mt-4 border-t border-slate-800 flex justify-end gap-3 sticky bottom-0 bg-slate-900 py-4 -mb-6 -mx-6 px-6 rounded-b-3xl z-10">
-                <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition">Cancel</button>
+              <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900 py-4 -mb-6 -mx-6 px-6 rounded-b-3xl z-10">
+                <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
                 <button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20">{editingId ? 'Update Product' : 'Save Product'}</button>
               </div>
             </form>
@@ -329,36 +372,36 @@ const Products = () => {
       {/* Stock Adjustment Modal */}
       {showAdjustModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white">Adjust Stock</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{adjustData.productName}</p>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Adjust Stock</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{adjustData.productName}</p>
               </div>
-              <button onClick={() => setShowAdjustModal(false)} className="text-slate-400 hover:text-white">&times;</button>
+              <button onClick={() => setShowAdjustModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
             </div>
             <form onSubmit={handleAdjustSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Stream *</label>
-                <select required value={adjustData.stream} onChange={(e) => setAdjustData({...adjustData, stream: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none appearance-none">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Stream *</label>
+                <select required value={adjustData.stream} onChange={(e) => setAdjustData({...adjustData, stream: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
                   <option value="TAX">TAX Stream</option>
                   <option value="ESTIMATE">ESTIMATE Stream</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Adjustment Quantity *</label>
-                <input required type="number" value={adjustData.quantity} onChange={(e) => setAdjustData({...adjustData, quantity: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none font-mono" placeholder="e.g. -5 for shrinkage, +10 for correction" />
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Adjustment Quantity *</label>
+                <input required type="number" value={adjustData.quantity} onChange={(e) => setAdjustData({...adjustData, quantity: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none font-mono" placeholder="e.g. -5 for shrinkage, +10 for correction" />
                 <p className="text-[10px] text-slate-500 mt-1">Use negative values for reductions (damage, shrinkage).</p>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Reason *</label>
-                <textarea required rows="2" value={adjustData.reason} onChange={(e) => setAdjustData({...adjustData, reason: e.target.value})} className="w-full bg-slate-950/60 border border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-white outline-none resize-none" placeholder="e.g. Damaged goods, Physical audit correction..." />
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Reason *</label>
+                <textarea required rows="2" value={adjustData.reason} onChange={(e) => setAdjustData({...adjustData, reason: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none resize-none" placeholder="e.g. Damaged goods, Physical audit correction..." />
               </div>
               {inventoryError && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300">{inventoryError}</div>
               )}
               <div className="pt-4 flex justify-end gap-3">
-                <button type="button" onClick={() => setShowAdjustModal(false)} className="px-5 py-2 rounded-xl text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition">Cancel</button>
+                <button type="button" onClick={() => setShowAdjustModal(false)} className="px-5 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
                 <button type="submit" disabled={adjustLoading} className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-blue-600/20">{adjustLoading ? 'Processing...' : 'Apply Adjustment'}</button>
               </div>
             </form>

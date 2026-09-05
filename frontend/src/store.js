@@ -6,6 +6,7 @@ import purchaseReducer from './features/purchaseSlice';
 import inventoryReducer from './features/inventorySlice';
 import salesReducer from './features/salesSlice';
 import paymentReducer from './features/paymentSlice';
+import returnsReducer from './features/returnsSlice';
 import expenseReducer from './features/expenseSlice';
 import auditReducer from './features/auditSlice';
 import { reportApi } from './features/reportApi';
@@ -19,6 +20,7 @@ const store = configureStore({
     inventory: inventoryReducer,
     sales: salesReducer,
     payments: paymentReducer,
+    returns: returnsReducer,
     expenses: expenseReducer,
     audit: auditReducer,
     [reportApi.reducerPath]: reportApi.reducer,

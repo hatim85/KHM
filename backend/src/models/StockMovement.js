@@ -11,7 +11,7 @@ const stockMovementSchema = new mongoose.Schema({
     type: String,
     enum: ['TAX', 'ESTIMATE'],
     required: true,
-    index: true, // Crucial for isolating dual-inventory
+    index: true, // Movement classification only — stock itself is unified
   },
   type: {
     type: String,
@@ -22,6 +22,17 @@ const stockMovementSchema = new mongoose.Schema({
     type: Number,
     required: true,
     // Negative for OUT, Positive for IN
+  },
+  unitCost: {
+    type: Number,
+    default: 0,
+    // Paise. For IN: actual unit cost (drives WAC). For OUT/ADJUSTMENT:
+    // carrying average cost at movement time (COGS reconstruction).
+  },
+  stockAfter: {
+    type: Number,
+    default: null,
+    // Physical stock immediately after this movement. Null for legacy rows.
   },
   referenceDocument: {
     type: mongoose.Schema.Types.ObjectId,
@@ -39,6 +50,10 @@ const stockMovementSchema = new mongoose.Schema({
     // Used for manual adjustment reasons
   }
 }, { timestamps: true });
+
+// Reconstruct product history + movement report filtering at scale.
+stockMovementSchema.index({ product: 1, createdAt: -1 });
+stockMovementSchema.index({ createdAt: -1 });
 
 const StockMovement = mongoose.model('StockMovement', stockMovementSchema);
 export default StockMovement;

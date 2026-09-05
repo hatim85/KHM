@@ -31,6 +31,33 @@ const paymentSchema = new mongoose.Schema({
     required: true,
     refPath: 'partyType',
   },
+  // Historical snapshot — payment history never depends on live masters.
+  partySnapshot: {
+    name: { type: String, default: '' },
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'REVERSED'],
+    default: 'ACTIVE',
+    index: true,
+  },
+  reversedAt: {
+    type: Date,
+    default: null,
+  },
+  reversalOf: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment',
+    default: null,
+  },
+  // Duplicate-submission guard (§33). Client-supplied `Idempotency-Key` header.
+  // No default: the field must be ABSENT (not null) when unused, because
+  // sparse indexes still index explicit nulls.
+  idempotencyKey: {
+    type: String,
+    sparse: true,
+    unique: true,
+  },
   amount: {
     type: Number,
     required: true,
@@ -55,6 +82,11 @@ const paymentSchema = new mongoose.Schema({
       type: String,
       required: true,
       enum: ['Sale', 'Purchase'],
+    },
+    // Snapshot — allocation history survives renames/number changes.
+    invoiceNumber: {
+      type: String,
+      default: '',
     },
     amount: {
       type: Number,

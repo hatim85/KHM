@@ -17,6 +17,14 @@ const productSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  specification: {
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: '',
+    // Free text (size, variant, etc.). Snapshotted onto bill lines at
+    // finalization and printed on sales bills.
+  },
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
@@ -48,9 +56,13 @@ const productSchema = new mongoose.Schema({
   gstRate: {
     type: Number,
     default: 0,
+    min: 0,
+    max: 28,
     // e.g., 5, 12, 18, 28
   },
-  // Cached stock values for quick reads. Actual stock is derived from StockMovements.
+  // Two independent physical pools: TAX (billed/GST) vs ESTIMATE (unbilled).
+  // A TAX purchase is never sellable in an ESTIMATE bill and vice versa.
+  // StockMovement ledger (stream-classified) is authoritative for history.
   taxStock: {
     type: Number,
     default: 0,
@@ -58,6 +70,19 @@ const productSchema = new mongoose.Schema({
   estimateStock: {
     type: Number,
     default: 0,
+  },
+  // Weighted Average Cost per pool (paise). Updated on every stock IN with a
+  // known unit cost. Never derived from purchasePrice at report time.
+  // WAC = average purchase rate of the pool; drives valuation + COGS.
+  averageCostTax: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  averageCostEst: {
+    type: Number,
+    default: 0,
+    min: 0,
   },
   reorderLevel: {
     type: Number,

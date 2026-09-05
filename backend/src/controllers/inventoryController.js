@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import StockMovement from '../models/StockMovement.js';
 import Product from '../models/Product.js';
 import ApiError from '../utils/ApiError.js';
+import { logAudit } from '../utils/auditLogger.js';
+import { applyStockAdjustment } from '../services/inventoryService.js';
 
 /**
  * Get all stock movements (Ledger View)
@@ -25,20 +27,19 @@ export const getStockMovements = async (req, res, next) => {
 
 /**
  * Get low stock alerts
- * A product is low stock if (taxStock + estimateStock) < reorderLevel
+ * A product is low stock if combined physical stock (taxStock + estimateStock) < reorderLevel
  */
 export const getLowStock = async (req, res, next) => {
   try {
-    // MongoDB aggregation to sum taxStock and estimateStock and compare with reorderLevel
     const lowStockProducts = await Product.aggregate([
       {
         $addFields: {
-          totalStock: { $add: ["$taxStock", "$estimateStock"] }
+          totalStock: { $add: [{ $ifNull: ['$taxStock', 0] }, { $ifNull: ['$estimateStock', 0] }] }
         }
       },
       {
         $match: {
-          $expr: { $lt: ["$totalStock", "$reorderLevel"] },
+          $expr: { $lt: ['$totalStock', '$reorderLevel'] },
           isActive: true
         }
       },
@@ -86,46 +87,46 @@ export const adjustStock = async (req, res, next) => {
   try {
     const { product, stream, quantity, reason } = req.body;
     
-    if (!product || !stream || !quantity || !reason) {
+    if (!product || !stream || quantity === undefined || quantity === null || !reason) {
       throw new ApiError(400, 'Product, stream, quantity, and reason are required');
     }
 
-    if (quantity === 0) {
-      throw new ApiError(400, 'Adjustment quantity cannot be zero');
+    if (!['TAX', 'ESTIMATE'].includes(stream)) {
+      throw new ApiError(400, 'Stream must be TAX or ESTIMATE (movement classification).');
     }
 
     const parsedQty = Number(quantity);
+    if (!parsedQty) {
+      throw new ApiError(400, 'Adjustment quantity cannot be zero');
+    }
 
-    // 1. Update Cached Stock on Product
-    const stockField = stream === 'TAX' ? 'taxStock' : 'estimateStock';
-    
-    const updatedProduct = await Product.findByIdAndUpdate(
-      product,
-      { $inc: { [stockField]: parsedQty } },
-      { session, new: true }
-    );
-
-    if (!updatedProduct) {
+    const productDoc = await Product.findById(product).session(session);
+    if (!productDoc) {
       throw new ApiError(404, 'Product not found');
     }
 
-    // 2. Insert Stock Movement
-    // Use the product ID itself as reference if there's no actual document
-    // OR create a generic InventoryAdjustment reference model
-    const stockMove = new StockMovement({
-      product,
+    // Single physical stock adjustment — audited, never drives stock negative.
+    const updatedProduct = await applyStockAdjustment({
+      productId: product,
+      delta: parsedQty,
       stream,
-      type: 'ADJUSTMENT',
-      quantity: parsedQty,
-      referenceDocument: product, 
+      referenceDocument: productDoc._id,
       referenceModel: 'ManualAdjustment',
       remarks: reason,
-    });
-
-    await stockMove.save({ session });
+    }, session);
 
     await session.commitTransaction();
     session.endSession();
+
+    logAudit({
+      action: 'STOCK_ADJUSTED',
+      entity: 'Product',
+      entityId: productDoc._id,
+      userId: req.user._id,
+      summary: `Stock adjusted for ${productDoc.name}: ${parsedQty > 0 ? '+' : ''}${parsedQty} (${stream}) — ${reason}`,
+      metadata: { product: productDoc.name, delta: parsedQty, stream, reason, stockAfter: updatedProduct.stock },
+      ipAddress: req.ip,
+    });
 
     res.status(200).json({ success: true, message: 'Stock adjusted successfully', data: updatedProduct });
   } catch (error) {
