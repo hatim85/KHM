@@ -40,7 +40,6 @@ const getS3Client = () => {
  */
 export const generateInvoicePDF = async (saleData, companySettings) => {
   const fileName = `invoices/${saleData.transactionType}/${saleData.invoiceNumber}_${Date.now()}.pdf`;
-  const s3Client = getS3Client();
 
   // Public URL for QR Code points to KHM backend public endpoint
   const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -52,22 +51,30 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
   // 1. Generate HTML Content
   const htmlContent = generateHTML(saleData, companySettings, qrCodeDataUri);
 
-  // 2. Launch Puppeteer to create PDF
+  // 2. Render + 3. store (sales documents only — CN/DN are record-only and
+  // must never generate or store PDFs: no local files, no uploads).
+  return storePdfBuffer(await renderPdfBuffer(htmlContent), fileName);
+};
+
+/** Shared HTML → PDF buffer step (puppeteer). */
+const renderPdfBuffer = async (htmlContent) => {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
   const page = await browser.newPage();
   await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-
   const pdfBuffer = await page.pdf({
     format: 'A4',
     margin: { top: '15px', right: '20px', bottom: '15px', left: '20px' },
     printBackground: true
   });
-
   await browser.close();
+  return pdfBuffer;
+};
 
-  // 3. Upload to OCI (primary) or fallback to local storage
+/** Shared upload step: OCI primary, local fallback. */
+const storePdfBuffer = async (pdfBuffer, fileName) => {
+  const s3Client = getS3Client();
   if (s3Client && process.env.OCI_BUCKET_NAME) {
     try {
       const command = new PutObjectCommand({
@@ -84,9 +91,8 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
       console.warn('[PDF] Falling back to local storage');
       return saveLocally(pdfBuffer, fileName);
     }
-  } else {
-    return saveLocally(pdfBuffer, fileName);
   }
+  return saveLocally(pdfBuffer, fileName);
 };
 
 const saveLocally = (buffer, fileName) => {
@@ -98,6 +104,13 @@ const saveLocally = (buffer, fileName) => {
   fs.writeFileSync(localPath, buffer);
   return { provider: 'local', objectKey: path.basename(fileName), fileName: path.basename(fileName) };
 };
+
+/**
+ * Statutory exemption note printed on every Bill of Supply (0%-GST sales).
+ * Exported for unit testing the bill content without launching a browser.
+ */
+export const BILL_OF_SUPPLY_EXEMPTION_NOTE =
+  'Goods/Services listed in this Bill of Supply are exempt from GST under Notification No. 12/2017-Central Tax (Rate).';
 
 const stateCodeToName = {
   '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand',
@@ -112,8 +125,13 @@ const stateCodeToName = {
 const generateHTML = (sale, companySettings, qrCodeDataUri) => {
   const formatMoney = (paise) => (paise / 100).toFixed(2);
   const isEstimate = sale.transactionType === 'ESTIMATE';
-  const title = isEstimate ? 'ESTIMATE' : 'TAX INVOICE';
-  const hasIgst = sale.totalIgst > 0;
+  const isBillOfSupply = !isEstimate && sale.billType === 'BILL_OF_SUPPLY';
+  const title = isEstimate ? 'ESTIMATE' : isBillOfSupply ? 'BILL OF SUPPLY' : 'TAX INVOICE';
+  const accent = isEstimate ? '#ea580c' : isBillOfSupply ? '#059669' : '#2563eb';
+  const accentLight = isEstimate ? '#fff7ed' : isBillOfSupply ? '#ecfdf5' : '#eff6ff';
+  const accentBorder = isEstimate ? '#fdba74' : isBillOfSupply ? '#6ee7b7' : '#93c5fd';
+  const accentText = isEstimate ? '#9a3412' : isBillOfSupply ? '#065f46' : '#1e40af';
+  const hasIgst = !isBillOfSupply && sale.totalIgst > 0;
 
   // Historical snapshots win — live masters may have changed since finalization.
   const company = (sale.companySnapshot && sale.companySnapshot.companyName)
@@ -143,6 +161,17 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
   const qtyWithUnit = (item) => {
     const u = prodOf(item).unit;
     return u ? `${item.quantity} ${u}` : `${item.quantity}`;
+  };
+
+  // Full qty cell: primary qty + unit, plus the measured secondary
+  // quantity on its own line where the line carries one. Never assumes
+  // any fixed primary<->secondary conversion.
+  const qtyCell = (item) => {
+    const sec = Number(item.secondaryQty) || 0;
+    const secName = item.secondaryUnitName || '';
+    const primary = qtyWithUnit(item);
+    if (sec > 0 && secName) return `${primary}<div class="product-meta">${sec} ${secName}</div>`;
+    return primary;
   };
 
   // Place of Supply = customer's state (name + 2-digit code).
@@ -211,9 +240,31 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
            ${item.specification || '-'}
           </div>
         </td>
-        <td class="text-center">${qtyWithUnit(item)}</td>
+        <td class="text-center">${qtyCell(item)}</td>
         <td class="text-right">₹${formatMoney(item.rate)}</td>
         <td class="text-right font-bold">₹${formatMoney(item.taxableValue || item.total)}</td>
+      </tr>
+    `;
+    }).join('');
+  } else if (isBillOfSupply) {
+    // Exempt supplies carry no GST breakup — rate equals amount, no tax columns.
+    rowsHtml = sale.items.map((item, index) => {
+      const prod = prodOf(item);
+      return `
+      <tr>
+        <td class="text-center">${index + 1}</td>
+        <td>
+          <div class="product-name">${prod.name}</div>
+          <div class="product-meta">HSN: ${prod.hsnCode || 'N/A'}</div>
+        </td>
+        <td>
+          <div class="text-center">
+            ${item.specification || '-'}
+          </div>
+        </td>
+        <td class="text-center">${qtyCell(item)}</td>
+        <td class="text-right">₹${formatMoney(item.rate)}</td>
+        <td class="text-right font-bold">₹${formatMoney(item.taxableValue)}</td>
       </tr>
     `;
     }).join('');
@@ -228,11 +279,11 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           <div class="product-meta">HSN: ${prod.hsnCode || 'N/A'}</div>
         </td>
         <td>
-          <div class="product-meta">
+          <div class="text-center">
             ${item.specification || '-'}
           </div>
         </td>
-        <td class="text-center">${qtyWithUnit(item)}</td>
+        <td class="text-center">${qtyCell(item)}</td>
         <td class="text-right">₹${formatMoney(item.rate)}</td>
         <td class="text-right">₹${formatMoney(item.taxableValue)}</td>
         ${hasIgst ? `
@@ -257,15 +308,15 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         body { font-family: 'Helvetica Neue', 'Inter', Helvetica, Arial, sans-serif; color: #1e293b; line-height: 1.5; font-size: 13px; margin: 0; padding: 0; background: #fff; }
         .invoice-box { max-width: 800px; margin: auto; padding: 20px 24px; }
         
-        .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid ${isEstimate ? '#ea580c' : '#2563eb'}; margin-bottom: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 12px; border-bottom: 3px solid ${accent}; margin-bottom: 8px; }
         
         .company-name { font-size: 28px; font-weight: 800; color: #0f172a; margin: 0 0 5px 0; letter-spacing: -0.5px; }
         .company-details { font-size: 13px; color: #64748b; }
         .company-details strong { color: #334155; font-weight: 600; }
         
         .title-section { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-        .invoice-title { font-size: 26px; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 8px; color: ${isEstimate ? '#ea580c' : '#2563eb'}; }
-        .qr-code { width: 78px; height: 78px; margin-top: 6px; border-radius: 3px; border: 1px solid #cbd5e1; padding: 1px; }
+        .invoice-title { font-size: 26px; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 3px; color: ${accent}; }
+        .qr-code { width: 78px; height: 78px; margin-top: 2px; border-radius: 3px; border: 1px solid #cbd5e1; padding: 1px; }
         
         .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; }
         .meta-table td { padding: 6px 0; }
@@ -273,63 +324,63 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         .bill-info-container {
           display: flex;
           width: 100%;
-          gap: 20px;
-          margin-bottom: 24px;
-          align-items: stretch;
+          gap: 12px;
+          margin-bottom: 8px;
+          align-items: flex-start;
         }
 
         .bill-to-section {
-          width: calc(50% - 10px);
-          flex: 0 0 calc(50% - 10px);
+          width: calc(50% - 6px);
+          flex: 0 0 calc(50% - 6px);
           background: #f8fafc;
-          padding: 16px 18px;
+          padding: 10px 14px;
           border-radius: 8px;
           border: 1px solid #e2e8f0;
         }
 
         .meta-column {
-          width: calc(50% - 10px);
-          flex: 0 0 calc(50% - 10px);
+          width: calc(50% - 6px);
+          flex: 0 0 calc(50% - 6px);
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 8px;
         }
 
         .invoice-meta-section {
           width: 100%;
-          padding: 16px 18px;
+          padding: 10px 14px;
           border-radius: 8px;
           border: 1px solid #e2e8f0;
         }
         
         .section-label {
-          font-size: 11px;
+          font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 1px;
           color: #64748b;
           font-weight: 700;
-          margin-bottom: 8px;
+          margin-bottom: 5px;
           border-bottom: 1px solid #e2e8f0;
-          padding-bottom: 6px;
+          padding-bottom: 4px;
         }
-        .customer-name { font-size: 18px; font-weight: 700; color: #0f172a; margin: 0 0 6px 0; }
+        .customer-name { font-size: 17px; font-weight: 700; color: #0f172a; margin: 0 0 4px 0; }
         
-        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; margin-top: 4px; }
+        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; margin-top: 0px; }
         .items-table th {
-          background-color: ${isEstimate ? '#fff7ed' : '#eff6ff'};
-          padding: 10px 8px;
+          background-color: ${accentLight};
+          padding: 8px;
           text-align: left;
-          border-bottom: 2px solid ${isEstimate ? '#fdba74' : '#93c5fd'};
-          border-top: 2px solid ${isEstimate ? '#fdba74' : '#93c5fd'};
+          border-bottom: 2px solid ${accentBorder};
+          border-top: 2px solid ${accentBorder};
           font-size: 10px;
           text-transform: uppercase;
-          color: ${isEstimate ? '#9a3412' : '#1e40af'};
+          color: ${accentText};
           font-weight: 700;
           letter-spacing: 0.5px;
         }
 
         .items-table td {
-          padding: 10px 8px;
+          padding: 7px 8px;
           border-bottom: 1px solid #e2e8f0;
           vertical-align: top;
         }
@@ -347,8 +398,8 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-top: 10px;
-          gap: 30px;
+          margin-top: 4px;
+          gap: 20px;
         }
 
         .notes-section {
@@ -356,10 +407,10 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           color: #475569;
           font-size: 12px;
         }
-        .notes-box { padding: 14px 18px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .notes-box { padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; width: 100%; }
         .transport-box {
           width: 100%;
-          padding: 12px 18px;
+          padding: 8px 14px;
           background: #f8fafc;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
@@ -367,8 +418,9 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           color: #475569;
         }
         .amount-words {
-          margin-top: 12px;
-          margin-left: auto;
+          margin-top: 0px;
+          margin-left: 0px;
+          margin-bottom: 8px;
           width: fit-content;
           max-width: 100%;
           padding: 10px 14px;
@@ -394,13 +446,13 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         }
 
         .totals-table td {
-          padding: 6px 10px;
+          padding: 4px 10px;
           text-align: right;
         }
         .totals-table .label { text-align: left; color: #475569; font-weight: 600; }
         .grand-total-row td { border-top: 2px solid #cbd5e1; border-bottom: 2px solid #cbd5e1; padding-top: 12px; padding-bottom: 12px; margin-top: 4px; font-size: 18px; font-weight: 800; color: #0f172a; background-color: #f8fafc; }
         
-        .signatory-section { text-align: right; margin-top: 35px; }
+        .signatory-section { text-align: right; margin-top: 20px; }
         .signatory-company { font-size: 12px; color: #475569; font-weight: 600; margin-bottom: 35px; }
         .signatory-line { display: inline-block; border-top: 1px solid #cbd5e1; padding-top: 5px; width: 180px; text-align: center; font-size: 11px; color: #94a3b8; }
         
@@ -470,6 +522,15 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
               <th style="width: 18%" class="text-right">Unit Rate</th>
               <th style="width: 19%" class="text-right">Total Amount</th>
             </tr>
+            ` : isBillOfSupply ? `
+            <tr>
+              <th style="width: 5%" class="text-center">#</th>
+              <th style="width: 32%">Item</th>
+              <th style="width: 18%">Specification</th>
+              <th style="width: 10%" class="text-center">Qty</th>
+              <th style="width: 16%" class="text-right">Rate</th>
+              <th style="width: 19%" class="text-right">Amount</th>
+            </tr>
             ` : `
             <tr>
               <th style="width: 4%" class="text-center">#</th>
@@ -495,8 +556,18 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
 
         <div class="summary-container">
           <div class="notes-section">
-            ${sale.remarks ? `
+            <div class="amount-words">
+              <div class="section-label">Amount in Words</div>
+              <div class="amount-words-value">${amountInWords(sale.grandTotal)}</div>
+            </div>
+            ${isBillOfSupply ? `
             <div class="notes-box">
+              <div class="section-label">GST Exemption Note</div>
+              <div>${BILL_OF_SUPPLY_EXEMPTION_NOTE}</div>
+            </div>
+            ` : ''}
+            ${sale.remarks ? `
+            <div class="notes-box" ${isBillOfSupply ? 'style="margin-top: 8px;"' : ''}>
               <div class="section-label">Remarks</div>
               <div>${sale.remarks}</div>
             </div>
@@ -505,16 +576,16 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           
           <table class="totals-table">
             <tr>
-              <td class="label">Taxable Amount:</td>
+              <td class="label">${isBillOfSupply ? 'Exempt Value:' : 'Taxable Amount:'}</td>
               <td>₹${formatMoney(sale.subTotal)}</td>
             </tr>
-            ${!isEstimate && hasIgst ? `
+            ${!isEstimate && !isBillOfSupply && hasIgst ? `
             <tr>
               <td class="label">Total IGST:</td>
               <td>₹${formatMoney(sale.totalIgst)}</td>
             </tr>
             ` : ''}
-            ${!isEstimate && !hasIgst ? `
+            ${!isEstimate && !isBillOfSupply && !hasIgst ? `
             <tr>
               <td class="label">Total CGST:</td>
               <td>₹${formatMoney(sale.totalCgst)}</td>
@@ -535,11 +606,6 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
             </tr>
           </table>
         </div>
-
-        <div class="amount-words">
-          <div class="section-label">Amount in Words</div>
-          <div class="amount-words-value">${amountInWords(sale.grandTotal)}</div>
-        </div>
         
         <div class="signatory-section">
           <div class="signatory-company">For ${company?.companyName || 'KHM Wholesale'}</div>
@@ -547,7 +613,7 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         </div>
 
         <div class="footer">
-          ${isEstimate ? 'This is an estimate. Not a tax invoice.' : 'Thank you for your business! This is a computer generated tax invoice.'}
+          ${isEstimate ? 'Thank you for your business!' : isBillOfSupply ? 'Thank you for your business! This is a computer generated bill of supply.' : 'Thank you for your business! This is a computer generated tax invoice.'}
         </div>
       </div>
     </body>
@@ -557,3 +623,8 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
 
 // Exported for unit testing the bill content without launching a browser.
 export { generateHTML };
+
+
+
+// NOTE: no Credit/Debit Note template exists on purpose — CN/DN are
+// record-only and must never generate or store PDFs.

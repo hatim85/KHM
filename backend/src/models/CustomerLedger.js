@@ -15,7 +15,7 @@ const customerLedgerSchema = new mongoose.Schema({
   },
   transactionType: {
     type: String,
-    enum: ['SALE', 'RECEIPT', 'RETURN', 'ADJUSTMENT'],
+    enum: ['SALE', 'RECEIPT', 'RETURN', 'ADJUSTMENT', 'CREDIT_NOTE'],
     required: true,
   },
   referenceDocument: {

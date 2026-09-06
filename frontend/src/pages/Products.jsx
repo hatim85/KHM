@@ -26,6 +26,8 @@ const Products = () => {
     category: '',
     brand: '',
     unit: '',
+    secondaryUnit: '',
+    pricingBasis: 'PRIMARY',
     hsnCode: '',
     purchasePrice: '',
     sellingPrice: '',
@@ -63,6 +65,8 @@ const Products = () => {
         category: product.category?._id || '',
         brand: product.brand?._id || '',
         unit: product.unit?._id || '',
+        secondaryUnit: product.secondaryUnit?._id || '',
+        pricingBasis: product.pricingBasis || 'PRIMARY',
         hsnCode: product.hsnCode || '',
         purchasePrice: (product.purchasePrice / 100).toFixed(2),
         sellingPrice: (product.sellingPrice / 100).toFixed(2),
@@ -74,6 +78,7 @@ const Products = () => {
       setEditingId(null);
       setFormData({
         sku: '', name: '', description: '', specification: '', category: '', brand: '', unit: '',
+        secondaryUnit: '', pricingBasis: 'PRIMARY',
         hsnCode: '', purchasePrice: '', sellingPrice: '', gstRate: 0, reorderLevel: 10, isActive: true
       });
     }
@@ -187,7 +192,7 @@ const Products = () => {
       {/* Table — one column per attribute, no merged cells */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1400px]">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1550px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Item Name</th>
@@ -196,6 +201,7 @@ const Products = () => {
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Category</th>
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Brand</th>
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unit</th>
+                <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Secondary</th>
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">HSN</th>
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">GST %</th>
                 <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Purchase ₹</th>
@@ -211,11 +217,11 @@ const Products = () => {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {productsLoading && products.length === 0 ? (
                 <tr>
-                  <td colSpan="15" className="py-8 text-center text-slate-500 text-sm">Loading products...</td>
+                  <td colSpan="16" className="py-8 text-center text-slate-500 text-sm">Loading products...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="15" className="py-8 text-center text-slate-500 text-sm">No products found.</td>
+                  <td colSpan="16" className="py-8 text-center text-slate-500 text-sm">No products found.</td>
                 </tr>
               ) : (
                 products.map((product) => {
@@ -238,6 +244,9 @@ const Products = () => {
                       <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">{product.category?.name || '—'}</td>
                       <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">{product.brand?.name || '—'}</td>
                       <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">{product.unit ? `${product.unit.name || ''} (${product.unit.shortName || ''})` : '—'}</td>
+                      <td className="py-4 px-4 text-sm text-slate-500 dark:text-slate-400">
+                        {product.secondaryUnit ? `${product.secondaryUnit.shortName || ''} · per ${(product.pricingBasis || 'PRIMARY') === 'SECONDARY' ? (product.secondaryUnit.shortName || 'SEC') : (product.unit?.shortName || 'PRI')}` : '—'}
+                      </td>
                       <td className="py-4 px-4 text-xs text-slate-500 font-mono">{product.hsnCode || '—'}</td>
                       <td className="py-4 px-4 text-sm text-right text-slate-600 dark:text-slate-300 font-mono">{product.gstRate ?? 0}%</td>
                       <td className="py-4 px-4 text-sm text-right text-slate-600 dark:text-slate-300 font-mono">₹{(product.purchasePrice / 100).toFixed(2)}</td>
@@ -323,6 +332,24 @@ const Products = () => {
                   <select required value={formData.unit} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
                     <option value="">Select Unit</option>
                     {units.map(u => <option key={u._id} value={u._id}>{u.name} ({u.shortName})</option>)}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">Primary / billing unit. Stock is counted in this unit.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Secondary Unit (optional)</label>
+                  <select value={formData.secondaryUnit} onChange={(e) => setFormData({...formData, secondaryUnit: e.target.value, pricingBasis: e.target.value ? formData.pricingBasis : 'PRIMARY'})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+                    <option value="">None</option>
+                    {units.filter(u => u._id !== formData.unit).map(u => <option key={u._id} value={u._id}>{u.name} ({u.shortName})</option>)}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">Measured unit (e.g. KG). Actual qty recorded per bill — no fixed conversion.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Priced Per</label>
+                  <select value={formData.pricingBasis} disabled={!formData.secondaryUnit} onChange={(e) => setFormData({...formData, pricingBasis: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none disabled:opacity-50">
+                    <option value="PRIMARY">Primary unit</option>
+                    <option value="SECONDARY">Secondary unit</option>
                   </select>
                 </div>
 

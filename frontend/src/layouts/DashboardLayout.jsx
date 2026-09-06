@@ -66,6 +66,7 @@ const DashboardLayout = () => {
     { label: 'Customers', path: '/customers', Icon: UsersIcon },
     { label: 'Suppliers', path: '/suppliers', Icon: FactoryIcon },
     { label: 'Payments', path: '/payments', Icon: CreditCardIcon },
+    { label: 'Credit / Debit Notes', path: '/notes', Icon: FileTextIcon },
     { label: 'Expenses', path: '/expenses', Icon: WalletIcon },
     { label: 'Reports', path: '/reports', Icon: ChartIcon },
     { label: 'Audit Logs', path: '/audit', Icon: ShieldCheckIcon },

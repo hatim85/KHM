@@ -78,6 +78,20 @@ const fyStart = (() => {
   return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
 })();
 
+// Production numbering (PREFIX-FYMMDD-SEQ) is keyed on the business timezone
+// (Asia/Kolkata default) — mirror it here so assertions hold near midnight.
+const bizParts = (() => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (t) => parts.find((p) => p.type === t)?.value;
+  return { y: Number(get('year')), m: Number(get('month')), d: Number(get('day')) };
+})();
+const bizFyStart = bizParts.m >= 4 ? bizParts.y : bizParts.y - 1;
+const bizFyCode = `${String(bizFyStart).slice(-2)}${String(bizFyStart + 1).slice(-2)}`;
+const bizMMDD = `${String(bizParts.m).padStart(2, '0')}${String(bizParts.d).padStart(2, '0')}`;
+const prodNumRe = (prefix) => new RegExp(`^${prefix}-${bizFyCode}${bizMMDD}-\\d{3}$`);
+
 /**
  * First-write transactions on a fresh DB can transiently abort while the
  * server finishes background index builds (codes 112/251). Production
@@ -256,7 +270,7 @@ await test('A. intra-state tax sale §35 (5 × ₹2500 @18% → CGST=SGST=₹112
   assert(s.totalSgst === 112500, `sgst ${s.totalSgst}`);
   assert(s.totalIgst === 0, `igst ${s.totalIgst}`);
   assert(s.grandTotal === 1475000, `grandTotal ${s.grandTotal}`);
-  assert(new RegExp(`^INV-${fyStart}-\\d{6}$`).test(s.invoiceNumber), `FY number ${s.invoiceNumber}`);
+  assert(prodNumRe('INV').test(s.invoiceNumber), `production number ${s.invoiceNumber}`);
   assert(s.customerSnapshot?.name === 'Local Trader', 'customer snapshot');
   assert(s.companySnapshot?.stateCode === '24', 'company snapshot');
   assert(s.items[0].productName === 'Test Widget', 'item snapshot');
@@ -293,7 +307,7 @@ await test('C. estimate sale: no GST, stock decreases', async () => {
   estimateNumber = s.invoiceNumber;
   assert(s.totalCgst === 0 && s.totalSgst === 0 && s.totalIgst === 0, 'estimate has no GST');
   assert(s.grandTotal === 500000, `estimate total ${s.grandTotal}`);
-  assert(new RegExp(`^EST-${fyStart}-\\d{6}$`).test(s.invoiceNumber), `FY number ${s.invoiceNumber}`);
+  assert(prodNumRe('EST').test(s.invoiceNumber), `production number ${s.invoiceNumber}`);
   const prod = await Product.findById(productId);
   assert(prod.estimateStock === 18, `ESTIMATE pool draws the estimate sale (${prod.estimateStock})`); // 20-2
   assert(prod.taxStock === 23, 'TAX pool untouched by estimate sale'); // 30-5-2
@@ -305,6 +319,7 @@ await test('PDF bill content: qty+unit, place of supply, amount words, transport
   const baseItems = [{
     product: { name: 'Bosch Drill', sku: 'BD-1', hsnCode: '8467', unit: { shortName: 'NOS' } },
     quantity: 2, rate: 650000, specification: '12mm chuck, 5m coil',
+    secondaryQty: 20, secondaryUnitName: 'KG', pricingBasis: 'PRIMARY',
     taxableValue: 1300000, gstRate: 18,
     cgst: 117000, sgst: 117000, igst: 0, total: 1534000,
     productName: '', sku: '', hsnCode: '', unitName: 'NOS',
@@ -318,6 +333,7 @@ await test('PDF bill content: qty+unit, place of supply, amount words, transport
   };
   const html = generateHTML(taxSale, company, '');
   assert(html.includes('2 NOS'), 'qty printed with unit');
+  assert(html.includes('20 KG'), 'measured secondary qty printed');
   assert(html.includes('Place of Supply'), 'place of supply present');
   assert(html.includes('Gujarat (24)'), 'place of supply value');
   assert(html.includes('Rupees Fifteen Thousand Three Hundred Forty Only'), 'amount in words');
@@ -446,7 +462,7 @@ await test('L. idempotent replay returns original (no duplicate)', async () => {
   };
   const r1 = await admin.post('/api/payments').set('idempotency-key', key).send(payload);
   assertStatus(r1, 201, 'first payment');
-  assert(new RegExp(`^REC-${fyStart}-\\d{6}$`).test(r1.body.data.voucherNumber), `FY voucher ${r1.body.data.voucherNumber}`);
+  assert(prodNumRe('REC').test(r1.body.data.voucherNumber), `production voucher ${r1.body.data.voucherNumber}`);
   const r2 = await admin.post('/api/payments').set('idempotency-key', key).send(payload);
   assert(r2.status === 200 && r2.body.deduplicated === true, 'replay deduplicated');
   assert(String(r2.body.data._id) === String(r1.body.data._id), 'same document returned');
@@ -475,7 +491,7 @@ await test('supplier payment §35 (₹20000 of ₹47200 leaves ₹27200)', async
     allocations: [{ invoiceId: purchaseId, amount: 2000000 }],
   });
   assertStatus(r, 201, 'supplier payment');
-  assert(new RegExp(`^PAY-${fyStart}-\\d{6}$`).test(r.body.data.voucherNumber), `FY voucher ${r.body.data.voucherNumber}`);
+  assert(prodNumRe('PAY').test(r.body.data.voucherNumber), `production voucher ${r.body.data.voucherNumber}`);
   const { default: Purchase } = await import('../models/Purchase.js');
   const pur = await Purchase.findById(purchaseId);
   assert(pur.amountPaid === 2000000 && pur.paymentStatus === 'PARTIAL', 'purchase PARTIAL');
@@ -683,7 +699,7 @@ await test('N. partial sales return: GST mirrors original, stock/ledger/outstand
   });
   assertStatus(r, 201, 'create sales return');
   const ret = r.body.data;
-  assert(new RegExp(`^SR-${fyStart}-\\d{6}$`).test(ret.returnNumber), `FY return number ${ret.returnNumber}`);
+  assert(prodNumRe('SR').test(ret.returnNumber), `production return number ${ret.returnNumber}`);
   assert(ret.stream === 'TAX', 'stream copied from original');
   assert(ret.originalNumber.length > 0, 'original linked');
   assert(ret.subTotal === 500000, `taxable ${ret.subTotal}`);
@@ -805,7 +821,7 @@ await test('O. partial purchase return: stock/ledger/ITC update, PR- FY number',
   });
   assertStatus(r, 201, 'create purchase return');
   const ret = r.body.data;
-  assert(new RegExp(`^PR-${fyStart}-\\d{6}$`).test(ret.returnNumber), `FY return number ${ret.returnNumber}`);
+  assert(prodNumRe('PR').test(ret.returnNumber), `production return number ${ret.returnNumber}`);
   assert(ret.subTotal === 600000, `taxable ${ret.subTotal}`);
   assert(ret.totalCgst + ret.totalSgst + ret.totalIgst === 108000, 'ITC reversal 108000');
   assert(ret.grandTotal === 708000, `return total ${ret.grandTotal}`);
@@ -930,6 +946,120 @@ await test('conversion bills only the not-yet-returned quantity', async () => {
   assertStatus(c, 201, 'convert remainder');
   assert(c.body.data.items[0].quantity === 1, `only remainder billed (got ${c.body.data.items[0].quantity})`);
   assert(c.body.data.subTotal === 250000, 'totals follow remainder');
+});
+
+// ---------- dual-unit (primary + measured secondary, no fixed conversion) ----------
+let kgUnitId, dualProductId;
+await test('dual-unit product setup + SECONDARY-without-unit rejected', async () => {
+  const u = await admin.post('/api/master/units').send({ name: 'Kilogram', shortName: 'KG' });
+  assertStatus(u, 201, 'create KG unit');
+  kgUnitId = u.body.data._id;
+  const bad = await admin.post('/api/master/products').send({
+    name: 'Bad Dual', unit: unitId, pricingBasis: 'SECONDARY',
+    purchasePrice: 100, sellingPrice: 100, gstRate: 18,
+  });
+  assert(bad.status === 400, `SECONDARY without unit rejected, got ${bad.status}`);
+  const p = await admin.post('/api/master/products').send({
+    name: 'Steel Rods', sku: 'STL-001', unit: unitId, secondaryUnit: kgUnitId,
+    pricingBasis: 'SECONDARY', purchasePrice: 5000, sellingPrice: 6000, gstRate: 18,
+  });
+  assertStatus(p, 201, 'create dual-unit product');
+  dualProductId = p.body.data._id;
+  assert(p.body.data.pricingBasis === 'SECONDARY', 'basis stored');
+});
+
+await test('dual-unit purchase: totals on secondary, stock in primary, WAC per primary', async () => {
+  // 10 NOS measured 100 KG @ ₹50/KG → taxable ₹5000, GST 18% = ₹900.
+  const r = await admin.post('/api/purchases').send({
+    transactionType: 'TAX', supplier: supplierId, invoiceNumber: 'SUP-DUAL-1',
+    invoiceDate: new Date().toISOString(), status: 'COMPLETED',
+    items: [{ product: dualProductId, quantity: 10, secondaryQty: 100, rate: 5000, taxRate: 18 }],
+  });
+  assertStatus(r, 201, 'dual purchase');
+  assert(r.body.data.subTotal === 500000, `taxable ${r.body.data.subTotal}`);
+  assert(r.body.data.taxTotal === 90000, `GST ${r.body.data.taxTotal}`);
+  assert(r.body.data.grandTotal === 590000, `total ${r.body.data.grandTotal}`);
+  const it = r.body.data.items[0];
+  assert(it.secondaryQty === 100 && it.secondaryUnitName === 'KG' && it.pricingBasis === 'SECONDARY', 'snapshots');
+  const prod = await Product.findById(dualProductId);
+  assert(prod.taxStock === 10, `primary stock ${prod.taxStock}`);
+  assert(prod.averageCostTax === 50000, `WAC per primary unit ${prod.averageCostTax}`); // 500000/10
+  const moves = await StockMovement.find({ product: dualProductId, referenceModel: 'Purchase' });
+  assert(moves.length === 1 && moves[0].secondaryQuantity === 100, 'movement captures measured qty');
+});
+
+await test('dual-unit sale validation: secondary required when priced secondary', async () => {
+  const miss = await admin.post('/api/sales').send({
+    transactionType: 'TAX', customer: custIntraId, invoiceNumber: 'AUTO',
+    invoiceDate: new Date().toISOString(), status: 'DRAFT',
+    items: [{ product: dualProductId, quantity: 2, rate: 6000 }],
+  });
+  assert(miss.status === 400, `missing secondaryQty rejected, got ${miss.status}`);
+  const stray = await admin.post('/api/sales').send({
+    transactionType: 'TAX', customer: custIntraId, invoiceNumber: 'AUTO',
+    invoiceDate: new Date().toISOString(), status: 'DRAFT',
+    items: [{ product: productId, quantity: 1, rate: 250000, secondaryQty: 5 }],
+  });
+  assert(stray.status === 400, `secondary qty without configured unit rejected, got ${stray.status}`);
+});
+
+let dualSaleId;
+await test('dual-unit sale: totals on secondary, OUT records both quantities', async () => {
+  // 2 NOS measured 20 KG @ ₹60/KG → taxable ₹1200, GST ₹216.
+  const r = await admin.post('/api/sales').send({
+    transactionType: 'TAX', customer: custIntraId, invoiceNumber: 'AUTO',
+    invoiceDate: new Date().toISOString(), status: 'COMPLETED',
+    items: [{ product: dualProductId, quantity: 2, secondaryQty: 20, rate: 6000 }],
+  });
+  assertStatus(r, 201, 'dual sale');
+  const s = r.body.data;
+  dualSaleId = s._id;
+  assert(s.subTotal === 120000, `taxable ${s.subTotal}`);
+  assert(s.totalCgst === 10800 && s.totalSgst === 10800, 'GST split');
+  const prod = await Product.findById(dualProductId);
+  assert(prod.taxStock === 8, `primary pool reduced (${prod.taxStock})`);
+  const moves = await StockMovement.find({ product: dualProductId, referenceModel: 'Sale' });
+  assert(moves.length === 1 && moves[0].quantity === -2 && moves[0].secondaryQuantity === -20, 'OUT captures both');
+});
+
+await test('dual-unit return pro-rates secondary; conversion carries it', async () => {
+  const ret = await admin.post('/api/returns/sales').send({
+    saleId: dualSaleId, items: [{ product: dualProductId, quantity: 1 }], reason: 'Dual return check',
+  });
+  assertStatus(ret, 201, 'partial dual return');
+  assert(ret.body.data.items[0].secondaryQty === 10, `secondary pro-rated (${ret.body.data.items[0].secondaryQty})`);
+  assert(ret.body.data.subTotal === 60000, 'return totals on remainder basis');
+  const moves = await StockMovement.find({ product: dualProductId, referenceModel: 'Return' });
+  assert(moves.length === 1 && moves[0].quantity === 1 && moves[0].secondaryQuantity === 10, 'return movement both qtys');
+
+  const upd = await admin.put(`/api/master/products/${dualProductId}`).send({ pricingBasis: 'PRIMARY' });
+  assertStatus(upd, 200, 'flip to PRIMARY pricing');
+  const fund = await admin.post('/api/purchases').send({
+    transactionType: 'ESTIMATE', supplier: supplierId, invoiceNumber: 'SUP-DUAL-EST',
+    invoiceDate: new Date().toISOString(), status: 'COMPLETED',
+    items: [{ product: dualProductId, quantity: 5, secondaryQty: 50, rate: 5000, taxRate: 0 }],
+  });
+  assertStatus(fund, 201, 'fund ESTIMATE pool');
+  const e = await admin.post('/api/sales').send({
+    transactionType: 'ESTIMATE', customer: custIntraId, invoiceNumber: 'AUTO',
+    invoiceDate: new Date().toISOString(), status: 'COMPLETED',
+    items: [{ product: dualProductId, quantity: 1, secondaryQty: 9, rate: 6000 }],
+  });
+  assertStatus(e, 201, 'primary-priced dual estimate');
+  assert(e.body.data.subTotal === 6000, `totals on primary (${e.body.data.subTotal})`);
+  const c = await admin.post(`/api/sales/${e.body.data._id}/convert`);
+  assertStatus(c, 201, 'convert dual estimate');
+  assert(c.body.data.items[0].secondaryQty === 9, 'conversion carries measured qty');
+  assert(c.body.data.items[0].pricingBasis === 'PRIMARY', 'conversion carries basis');
+});
+
+await test('reports expose secondary quantities', async () => {
+  const r = await admin.get('/api/reports/products/top-selling');
+  assertStatus(r, 200, 'top selling');
+  const row = r.body.data.find((x) => String(x._id) === String(dualProductId));
+  // TAX docs: dual sale (20 KG) + converted estimate invoice (9 KG).
+  assert(row && row.totalSecondaryQuantity === 29, `secondary aggregate (${row?.totalSecondaryQuantity})`);
+  assert(row && row.secondaryUnit === 'KG', 'secondary unit label');
 });
 
 // ---------- summary ----------

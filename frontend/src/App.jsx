@@ -20,6 +20,8 @@ import NewTaxBill from './pages/NewTaxBill';
 import StockMovements from './pages/StockMovements';
 import Payments from './pages/Payments';
 import Returns from './pages/Returns';
+import Notes from './pages/Notes';
+import NewNote from './pages/NewNote';
 import LedgerView from './pages/LedgerView';
 import MasterAttributes from './pages/MasterAttributes';
 import Expenses from './pages/Expenses';
@@ -72,6 +74,8 @@ function App() {
           <Route path="suppliers" element={<Suppliers />} />
           <Route path="payments" element={<Payments />} />
           <Route path="returns" element={<Returns />} />
+          <Route path="notes" element={<Notes />} />
+          <Route path="notes/new" element={<NewNote />} />
           <Route path="ledger/:partyType/:partyId" element={<LedgerView />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="reports" element={<Reports />} />

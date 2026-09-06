@@ -115,14 +115,16 @@ export const createPayment = async (req, res, next) => {
         throw new ApiError(400, `Invoice ${invoice.invoiceNumber} belongs to the ${invoice.transactionType} stream and cannot be allocated in a ${stream} payment.`);
       }
       
-      const outstanding = invoice.grandTotal - (invoice.amountPaid || 0) - (invoice.returnedAmount || 0);
+      const outstanding = invoice.grandTotal - (invoice.amountPaid || 0) - (invoice.returnedAmount || 0)
+        - (invoice.creditNoteAmount || 0) - (invoice.debitNoteAmount || 0);
       if (alloc.amount > outstanding) {
         throw new ApiError(400, `Cannot overpay invoice ${invoice.invoiceNumber}. Outstanding: ${outstanding}`);
       }
 
       const newAmountPaid = (invoice.amountPaid || 0) + alloc.amount;
-      // Return credits settle the invoice alongside cash.
-      const settled = newAmountPaid + (invoice.returnedAmount || 0);
+      // Return + note credits settle the invoice alongside cash.
+      const settled = newAmountPaid + (invoice.returnedAmount || 0)
+        + (invoice.creditNoteAmount || 0) + (invoice.debitNoteAmount || 0);
       const newPaymentStatus = settled >= invoice.grandTotal ? 'PAID' : newAmountPaid > 0 ? 'PARTIAL' : 'UNPAID';
 
       await ModelToUpdate.findByIdAndUpdate(invoice._id, {
@@ -138,7 +140,8 @@ export const createPayment = async (req, res, next) => {
       });
     }
 
-    // 2. Generate Voucher Number atomically (FY-aware; concurrent requests never collide)
+    // 2. Generate Voucher Number atomically (PREFIX-FYMMDD-SEQ, per-day series;
+    // backend-only, keyed on the voucher's business date — never reused)
     const generated = await getNextDocumentNumber(
       type === 'RECEIPT' ? 'RECEIPT' : 'PAYMENT',
       date ? new Date(date) : new Date()
@@ -148,6 +151,8 @@ export const createPayment = async (req, res, next) => {
     // 3. Create Payment Record
     const payment = new Payment({
       voucherNumber,
+      financialYear: generated.fy,
+      documentDate: generated.documentDate,
       date: date || new Date(),
       type,
       stream,
@@ -263,7 +268,8 @@ export const reversePayment = async (req, res, next) => {
       const invoice = await ModelToUpdate.findById(alloc.invoiceId).session(session);
       if (!invoice) throw new ApiError(404, `Allocated invoice ${alloc.invoiceId} not found`);
       const restoredPaid = Math.max(0, (invoice.amountPaid || 0) - alloc.amount);
-      const restoredSettled = restoredPaid + (invoice.returnedAmount || 0);
+      const restoredSettled = restoredPaid + (invoice.returnedAmount || 0)
+        + (invoice.creditNoteAmount || 0) + (invoice.debitNoteAmount || 0);
       await ModelToUpdate.findByIdAndUpdate(invoice._id, {
         amountPaid: restoredPaid,
         paymentStatus: restoredSettled >= invoice.grandTotal ? 'PAID' : restoredPaid > 0 ? 'PARTIAL' : 'UNPAID',

@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test:integration": "node src/scripts/runIntegrationTests.js"
+    "test:integration": "node src/scripts/runIntegrationTests.js",
+    "test:numbering": "node src/scripts/testNumbering.js",
+    "test": "npm run test:integration && npm run test:numbering"
   },
   "keywords": [],
   "author": "",

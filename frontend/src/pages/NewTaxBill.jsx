@@ -10,7 +10,7 @@ import { AlertTriangleIcon, ArrowLeftIcon, XIcon, PlusIcon } from '../components
 const NewTaxBill = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  
+
   const { data: customers } = useSelector(state => state.masterData.customers);
   const { data: products } = useSelector(state => state.masterData.products);
   const { data: settings } = useSelector(state => state.settings);
@@ -19,7 +19,6 @@ const NewTaxBill = () => {
   const [formData, setFormData] = useState({
     transactionType: 'TAX',
     customer: '',
-    invoiceNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     status: 'COMPLETED',
     discount: 0,
@@ -28,7 +27,7 @@ const NewTaxBill = () => {
   });
 
   const [items, setItems] = useState([
-    { product: '', quantity: 1, rate: 0, gstRate: 0 }
+    { product: '', quantity: 1, rate: 0, gstRate: 0, secondaryQty: 0 }
   ]);
 
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -72,7 +71,7 @@ const NewTaxBill = () => {
   };
 
   const addItemRow = () => {
-    setItems([...items, { product: '', quantity: 1, rate: 0, gstRate: 0 }]);
+    setItems([...items, { product: '', quantity: 1, rate: 0, gstRate: 0, secondaryQty: 0 }]);
   };
 
   const removeItemRow = (index) => {
@@ -95,11 +94,15 @@ const NewTaxBill = () => {
   const calculatedItems = items.map(item => {
     const rate = parseFloat(item.rate) || 0;
     const qty = parseFloat(item.quantity) || 0;
-    const taxableValue = rate * qty;
-    
+    const prod = products.find(p => p._id === item.product);
+    const sec = parseFloat(item.secondaryQty) || 0;
+    // Preview mirrors backend pricing: rate applies to the pricing-basis unit.
+    const billQty = prod?.pricingBasis === 'SECONDARY' ? sec : qty;
+    const taxableValue = rate * billQty;
+
     const gstRate = parseFloat(item.gstRate) || 0;
     const taxAmount = taxableValue * (gstRate / 100);
-    
+
     let cgst = 0, sgst = 0, igst = 0;
     if (isIntraState) {
       cgst = taxAmount / 2;
@@ -109,7 +112,7 @@ const NewTaxBill = () => {
     }
 
     const lineTotal = taxableValue + taxAmount;
-    
+
     subTotal += taxableValue;
     totalCgst += cgst;
     totalSgst += sgst;
@@ -121,6 +124,19 @@ const NewTaxBill = () => {
   const parsedDiscount = parseFloat(formData.discount) || 0;
   const totalTax = totalCgst + totalSgst + totalIgst;
   const grandTotal = subTotal + totalTax - parsedDiscount;
+
+  // GST split preview (backend-authoritative on product.gstRate):
+  // 0%-GST lines go on a Bill of Supply, the rest on a Tax Invoice.
+  const gstRateOf = (item) => {
+    const prod = products.find(p => p._id === item.product);
+    const r = prod ? prod.gstRate : item.gstRate;
+    return parseFloat(r) || 0;
+  };
+  const chosenLines = items.filter(i => i.product);
+  const exemptCount = chosenLines.filter(i => gstRateOf(i) === 0).length;
+  const taxableCount = chosenLines.filter(i => gstRateOf(i) !== 0).length;
+  const willSplit = exemptCount > 0 && taxableCount > 0;
+  const willBeSupplyOnly = chosenLines.length > 0 && taxableCount === 0;
 
   const saveToIndexedDB = async (payload) => {
     const db = await openDB('khm-offline-db', 1, {
@@ -141,12 +157,12 @@ const NewTaxBill = () => {
 
     const submissionData = {
       ...formData,
-      invoiceNumber: formData.invoiceNumber.trim() || 'AUTO',
       discount: Math.round(parsedDiscount * 100),
       items: items.map(i => ({
         product: i.product,
         quantity: Number(i.quantity),
         rate: Math.round(Number(i.rate) * 100),
+        secondaryQty: Number(i.secondaryQty) || 0,
       }))
     };
 
@@ -157,6 +173,14 @@ const NewTaxBill = () => {
 
     const result = await dispatch(createSale(submissionData));
     if (!result.error) {
+      const split = result.payload?.splitBills || (result.payload?.data ? [result.payload.data] : []);
+      if (split.length > 1) {
+        const tax = split.find((s) => s.billType !== 'BILL_OF_SUPPLY');
+        const bos = split.find((s) => s.billType === 'BILL_OF_SUPPLY');
+        alert(`Bill split by GST as required:\n• Tax Invoice ${tax?.invoiceNumber} (GST items)\n• Bill of Supply ${bos?.invoiceNumber} (0% GST exempt items)`);
+      } else if (split[0]?.billType === 'BILL_OF_SUPPLY') {
+        alert(`All items are 0% GST — Bill of Supply ${split[0]?.invoiceNumber} created (exempt under Notification No. 12/2017-Central Tax (Rate)).`);
+      }
       navigate('/sales/tax');
     }
   };
@@ -165,8 +189,8 @@ const NewTaxBill = () => {
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {isOffline && (
         <div className="bg-amber-500/20 border border-amber-500/40 p-4 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <AlertTriangleIcon size={20} className="text-amber-600 dark:text-amber-500 shrink-0" />
+          <div className="flex items-center gap-3">
+            <AlertTriangleIcon size={20} className="text-amber-600 dark:text-amber-500 shrink-0" />
             <div>
               <h3 className="text-amber-600 dark:text-amber-500 font-bold text-sm">Offline Mode Active</h3>
               <p className="text-amber-500/80 text-xs mt-0.5">Invoices created now will be saved to your device and synced when you reconnect.</p>
@@ -195,10 +219,9 @@ const NewTaxBill = () => {
         {/* Document Header */}
         <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-3 gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 blur-3xl -z-10 opacity-30 bg-indigo-500"></div>
-
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Customer *</label>
-            <select required value={formData.customer} onChange={(e) => setFormData({...formData, customer: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+            <select required value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
               <option value="">Select Customer</option>
               {customers.map(c => <option key={c._id} value={c._id}>{c.name} {c.gstin ? `(GST: ${c.gstin})` : '(B2C)'}</option>)}
             </select>
@@ -209,15 +232,11 @@ const NewTaxBill = () => {
             )}
           </div>
 
-          {/* <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Invoice Number</label>
-            <input type="text" value={formData.invoiceNumber} onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})} placeholder="Auto-generated (INV-YYYY-XXXXXX)" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" />
-            <p className="text-[10px] text-slate-500 mt-1">Leave blank to auto-generate the next financial-year number.</p>
-          </div> */}
+          {/* Numbers are generated on the backend (PREFIX-FYMMDD-SEQ) and shown after saving. */}
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Invoice Date *</label>
-            <input required type="date" value={formData.invoiceDate} onChange={(e) => setFormData({...formData, invoiceDate: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]" />
+            <input required type="date" value={formData.invoiceDate} onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]" />
           </div>
         </div>
 
@@ -225,10 +244,34 @@ const NewTaxBill = () => {
         <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Transport / Dispatch Through (Optional)</label>
-            <input type="text" value={formData.dispatchThrough} onChange={(e) => setFormData({...formData, dispatchThrough: e.target.value})} placeholder="e.g. VRL Logistics, Self pickup" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
+            <input type="text" value={formData.dispatchThrough} onChange={(e) => setFormData({ ...formData, dispatchThrough: e.target.value })} placeholder="e.g. VRL Logistics, Self pickup" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
           </div>
           <p className="text-xs text-slate-500 self-center">Printed on the bill under Transport / Delivery. Leave blank if not applicable.</p>
         </div>
+
+        {/* GST split preview: 0%-GST lines become a Bill of Supply */}
+        {willSplit && (
+          <div className="bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-2xl flex items-start gap-3">
+            <AlertTriangleIcon size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">Mixed GST bill — will be split into 2 documents</h3>
+              <p className="text-emerald-600/90 dark:text-emerald-300/80 text-xs mt-1">
+                {taxableCount} GST item(s) → Tax Invoice (INV-…) &nbsp;+&nbsp; {exemptCount} exempt 0%-GST item(s) → Bill of Supply (BOS-…, with the Notification No. 12/2017 exemption note).
+              </p>
+            </div>
+          </div>
+        )}
+        {willBeSupplyOnly && (
+          <div className="bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-2xl flex items-start gap-3">
+            <AlertTriangleIcon size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">All items are 0% GST — Bill of Supply</h3>
+              <p className="text-emerald-600/90 dark:text-emerald-300/80 text-xs mt-1">
+                This will generate a Bill of Supply (BOS-…) carrying the note “exempt from GST under Notification No. 12/2017-Central Tax (Rate)”.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Item Rows */}
         <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden">
@@ -238,6 +281,7 @@ const NewTaxBill = () => {
                 <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                   <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-12">#</th>
                   <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[250px]">Product (HSN)</th>
+                  <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-24 text-center">Specification</th>
                   <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-24 text-center">TAX Stock</th>
                   <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-24">Qty</th>
                   <th className="py-4 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-32">Rate (Ex. GST)</th>
@@ -253,6 +297,12 @@ const NewTaxBill = () => {
                   const selectedProductInfo = products.find(p => p._id === item.product);
                   const availableStock = selectedProductInfo?.taxStock ?? 0;
                   const taxAmt = item.cgst + item.sgst + item.igst;
+                  const secUnit = selectedProductInfo?.secondaryUnit;
+                  const secName = secUnit?.shortName || '';
+                  console.log("sel prod info", selectedProductInfo, secUnit, secName);
+                  const basisUnit = selectedProductInfo?.pricingBasis === 'SECONDARY' && secName
+                    ? secName
+                    : (selectedProductInfo?.unit?.shortName || '');
                   return (
                     <tr key={index} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition group">
                       <td className="py-3 px-4 text-sm text-slate-500 font-mono">{index + 1}</td>
@@ -261,27 +311,95 @@ const NewTaxBill = () => {
                           <option value="">Search Product...</option>
                           {availableProducts(index).map(p => <option key={p._id} value={p._id}>{p.name} {p.hsnCode ? `(${p.hsnCode})` : ''}</option>)}
                         </select>
-                        {(() => {
-                          const spec = products.find(p => p._id === item.product)?.specification;
-                          return spec ? <p className="text-[11px] text-slate-500 mt-1">Spec: {spec}</p> : null;
-                        })()}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`text-xs font-bold font-mono px-2 py-1 rounded`}>
+                          {(() => {
+                            const spec = products.find(p => p._id === item.product)?.specification;
+                            return spec ? <p className="text-xs text-slate-500 mt-1">{spec}</p> : null;
+                          })()}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`text-xs font-bold font-mono px-2 py-1 rounded ${availableStock > 0 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
                           {item.product ? availableStock : '-'}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      {/* <td className="py-3 px-4">
                         <input required type="number" min="1" step="any" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
+                        {secName && (
+                          <input
+                            required={selectedProductInfo?.pricingBasis === 'SECONDARY'}
+                            type="number" min="0" step="any" value={item.secondaryQty || ''}
+                            onChange={(e) => handleItemChange(index, 'secondaryQty', e.target.value)}
+                            placeholder={`Actual ${secName}`}
+                            title={`Measured quantity in ${secName} (no fixed conversion)`}
+                            className="w-full mt-1.5 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none font-mono"
+                          />
+                        )}
+                      </td> */}
+
+                      <td className="py-3 px-4">
+                        <div className="space-y-2">
+
+                          {/* Primary Quantity */}
+                          <div>
+                            <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                              Qty ({selectedProductInfo?.unit?.shortName || 'unit'})
+                            </label>
+
+                            <div className="flex items-center">
+                              <input
+                                required
+                                type="number"
+                                min="1"
+                                step="any"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  handleItemChange(index, 'quantity', e.target.value)
+                                }
+                                className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Secondary Quantity */}
+                          {secUnit && (
+                            <div>
+                              <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                                Secondary Qty ({secName})
+                              </label>
+
+                              <input
+                                required={selectedProductInfo?.pricingBasis === 'SECONDARY'}
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={item.secondaryQty || ''}
+                                onChange={(e) =>
+                                  handleItemChange(index, 'secondaryQty', e.target.value)
+                                }
+                                placeholder={`Enter ${secName}`}
+                                title={`Measured quantity in ${secName}`}
+                                className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          )}
+
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <input required type="number" min="0" step="0.01" value={item.rate} onChange={(e) => handleItemChange(index, 'rate', e.target.value)} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none font-mono" />
+                        {basisUnit && <p className="text-[10px] text-slate-500 mt-1">per {basisUnit}</p>}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className="text-sm font-medium text-slate-600 dark:text-slate-300 font-mono">{item.taxableValue.toFixed(2)}</span>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{item.gstRate}%</span>
+                        {Number(item.gstRate) === 0 && item.product && (
+                          <span className="ml-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">BOS</span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className="text-sm text-slate-500 dark:text-slate-400 font-mono">{taxAmt.toFixed(2)}</span>
@@ -298,7 +416,7 @@ const NewTaxBill = () => {
               </tbody>
             </table>
           </div>
-          
+
           <div className="p-4 bg-slate-100 dark:bg-slate-800/20 border-t border-slate-200 dark:border-slate-800">
             <button type="button" onClick={addItemRow} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-300 text-sm font-medium flex items-center gap-1 transition">
               <PlusIcon size={15} /> Add another line
@@ -311,13 +429,13 @@ const NewTaxBill = () => {
           <div className="lg:col-span-2 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Remarks / Notes</label>
-              <textarea rows="3" value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} className="w-full bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 rounded-2xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none resize-none"></textarea>
+              <textarea rows="3" value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} className="w-full bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 rounded-2xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none resize-none"></textarea>
             </div>
-            
+
             <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Document Status</label>
-                <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none font-medium">
+                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none font-medium">
                   <option value="DRAFT">Save as Draft (No stock movement)</option>
                   <option value="COMPLETED">Completed Tax Bill (Reduces stock, updates ledger, generates PDF)</option>
                 </select>
@@ -331,7 +449,7 @@ const NewTaxBill = () => {
                 <span className="text-sm text-slate-500 dark:text-slate-400">Taxable Value</span>
                 <span className="text-sm text-slate-900 dark:text-white font-mono font-medium">₹{subTotal.toFixed(2)}</span>
               </div>
-              
+
               {isIntraState ? (
                 <>
                   <div className="flex justify-between items-center">
@@ -352,11 +470,11 @@ const NewTaxBill = () => {
 
               <div className="flex justify-between items-center">
                 <span className="text-sm text-slate-500 dark:text-slate-400">Discount (₹)</span>
-                <input type="number" min="0" step="0.01" value={formData.discount} onChange={(e) => setFormData({...formData, discount: e.target.value})} className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded px-2 py-1 text-sm text-right text-slate-900 dark:text-white outline-none font-mono" />
+                <input type="number" min="0" step="0.01" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: e.target.value })} className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded px-2 py-1 text-sm text-right text-slate-900 dark:text-white outline-none font-mono" />
               </div>
-              
+
               <div className="h-px w-full bg-slate-200 dark:bg-slate-800 my-2"></div>
-              
+
               <div className="flex justify-between items-end">
                 <span className="text-base font-bold text-slate-600 dark:text-slate-300">Grand Total</span>
                 <span className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 font-mono tracking-tight">₹{grandTotal.toFixed(2)}</span>

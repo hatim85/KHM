@@ -1,42 +1,107 @@
 import CompanySettings from '../models/CompanySettings.js';
+import DocumentCounter from '../models/DocumentCounter.js';
+import ApiError from './ApiError.js';
 
 /**
- * Financial-year-aware document numbering.
- * Indian FY: 1 April – 31 March. Year component = FY start year.
- *   FY 2026-27 => INV-2026-000001
- * Each document type owns an independent sequence.
- * Generation is atomic (MongoDB findOneAndUpdate) so concurrent
- * requests can never receive the same number.
+ * Production document numbering.
+ *
+ * FINAL FORMAT:  PREFIX-FYMMDD-SEQUENCE
+ *   e.g. INV-26270906-001
+ *     INV      = document-type series prefix
+ *     2627     = Indian financial year 2026-27 (last 2 digits of start + end)
+ *     0906     = document date in the business timezone (MMDD)
+ *     001      = per-day sequence for that type + FY + date + series (001–999)
+ *
+ * Rules enforced here:
+ * - Indian FY (1 Apr – 31 Mar), derived from the DOCUMENT date in the
+ *   business timezone — never the server clock alone.
+ * - Sequence resets to 001 every new date, per document type / FY / series.
+ * - 999 per day is the hard ceiling: the 1000th allocation throws an admin
+ *   error and no `…-1000` number is ever created.
+ * - Allocation is a single atomic MongoDB upsert (`$inc`), so concurrent
+ *   requests can never collide and can never raise write conflicts.
+ * - Numbers are backend-only. Callers must NOT accept frontend numbers.
+ * - A consumed number is never reused: cancelled/failed documents keep
+ *   their numbers, and gaps from aborted transactions are never refilled.
  */
 
-export const getFinancialYearStart = (date = new Date()) => {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = d.getMonth(); // 0-indexed; April = 3
-  return month >= 3 ? year : year - 1;
+export const DEFAULT_TIMEZONE = 'Asia/Kolkata';
+export const MAX_DAILY_SEQUENCE = 999;
+
+/** Business-calendar parts of a date in a given IANA timezone. */
+export const getBusinessDateParts = (date = new Date(), timezone = DEFAULT_TIMEZONE) => {
+  const tz = timezone || DEFAULT_TIMEZONE;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(date));
+  const get = (type) => parts.find((p) => p.type === type)?.value;
+  return { y: Number(get('year')), m: Number(get('month')), d: Number(get('day')) };
 };
 
+/**
+ * Indian financial-year START year for a date.
+ * 1 April – 31 March. April (m=4) belongs to the new FY.
+ * `dateOrYear`: a Date/timestamp, or (legacy) a full year number which is
+ * returned as-is. `timezone` applies when a Date is given.
+ */
+export const getFinancialYearStart = (dateOrYear = new Date(), timezone = DEFAULT_TIMEZONE) => {
+  if (typeof dateOrYear === 'number' && Number.isInteger(dateOrYear) && dateOrYear > 1900 && dateOrYear < 2200) {
+    return dateOrYear;
+  }
+  const { y, m } = getBusinessDateParts(dateOrYear, timezone);
+  return m >= 4 ? y : y - 1;
+};
+
+/** FY code embedded in numbers: FY 2026-27 => "2627". */
+export const getFinancialYearCode = (fyStart) => {
+  const s = Number(fyStart);
+  return `${String(s).slice(-2)}${String(s + 1).slice(-2)}`;
+};
+
+export const getFinancialYearLabel = (fyStart) => `${fyStart}-${String(Number(fyStart) + 1).slice(-2)}`;
+
+/** "20260906" key for per-day counter isolation. */
+export const getDateKey = (y, m, d) =>
+  `${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+
+/** "0906" (MMDD) as printed in the number. */
+export const getMMDD = (m, d) => `${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+
 export const DOCUMENT_TYPES = Object.freeze({
-  TAX: { prefixField: 'taxInvoicePrefix', nextField: 'taxInvoiceNextNumber', fyField: 'taxInvoiceFY', defaultPrefix: 'INV-' },
-  ESTIMATE: { prefixField: 'estimatePrefix', nextField: 'estimateNextNumber', fyField: 'estimateFY', defaultPrefix: 'EST-' },
-  SALES_RETURN: { prefixField: 'salesReturnPrefix', nextField: 'salesReturnNextNumber', fyField: 'salesReturnFY', defaultPrefix: 'SR-' },
-  PURCHASE_RETURN: { prefixField: 'purchaseReturnPrefix', nextField: 'purchaseReturnNextNumber', fyField: 'purchaseReturnFY', defaultPrefix: 'PR-' },
-  RECEIPT: { prefixField: 'receiptPrefix', nextField: 'receiptNextNumber', fyField: 'receiptFY', defaultPrefix: 'REC-' },
-  PAYMENT: { prefixField: 'paymentPrefix', nextField: 'paymentNextNumber', fyField: 'paymentFY', defaultPrefix: 'PAY-' },
+  TAX: { prefixField: 'taxInvoicePrefix', defaultPrefix: 'INV-', label: 'Tax Invoice' },
+  SUPPLY: { prefixField: 'supplyPrefix', defaultPrefix: 'BOS-', label: 'Bill of Supply' },
+  ESTIMATE: { prefixField: 'estimatePrefix', defaultPrefix: 'EST-', label: 'Estimate' },
+  SALES_RETURN: { prefixField: 'salesReturnPrefix', defaultPrefix: 'SR-', label: 'Sales Return' },
+  PURCHASE_RETURN: { prefixField: 'purchaseReturnPrefix', defaultPrefix: 'PR-', label: 'Purchase Return' },
+  CREDIT_NOTE: { prefixField: 'creditNotePrefix', defaultPrefix: 'CN-', label: 'Credit Note' },
+  DEBIT_NOTE: { prefixField: 'debitNotePrefix', defaultPrefix: 'DN-', label: 'Debit Note' },
+  RECEIPT: { prefixField: 'receiptPrefix', defaultPrefix: 'REC-', label: 'Receipt Voucher' },
+  PAYMENT: { prefixField: 'paymentPrefix', defaultPrefix: 'PAY-', label: 'Payment Voucher' },
 });
 
-export const formatDocumentNumber = (prefix, fyStart, seq) =>
-  `${prefix}${fyStart}-${String(seq).padStart(6, '0')}`;
+export const formatDocumentNumber = (prefix, fyCode, mmdd, seq) =>
+  `${prefix}${fyCode}${mmdd}-${String(seq).padStart(3, '0')}`;
 
-/** Matches INV-2026-000001 style numbers (prefix letters + FY + 6 digits). */
-const FY_NUMBER_REGEX = /^[A-Z]{2,5}-(\d{4})-(\d{6})$/;
+/** Matches the production format: PREFIX-FYMMDD-SEQ (e.g. INV-26270906-001). */
+const NEW_NUMBER_REGEX = /^[A-Z]{2,5}-\d{8}-\d{3}$/;
+
+export const isNewDocumentNumber = (value) => {
+  if (!value) return false;
+  return NEW_NUMBER_REGEX.test(String(value).trim());
+};
+
+/** Matches the previous FY format (INV-2026-000001) — history, never generated. */
+const OLD_FY_NUMBER_REGEX = /^[A-Z]{2,5}-(\d{4})-(\d{6})$/;
 
 export const isFyDocumentNumber = (value) => {
   if (!value) return false;
-  return FY_NUMBER_REGEX.test(String(value).trim());
+  return OLD_FY_NUMBER_REGEX.test(String(value).trim());
 };
 
-/** Legacy numbers (INV-0001, timestamps) are accepted for backward compat but never generated. */
+/** Client placeholders that mean "backend, generate a number for me". */
 export const isPlaceholderNumber = (value) => {
   if (!value) return true;
   const s = String(value).trim();
@@ -46,68 +111,111 @@ export const isPlaceholderNumber = (value) => {
   return false;
 };
 
-/**
- * Atomically consume the next sequence value for a document type.
- *
- * Counter operations run WITHOUT the caller's transaction session, as
- * single-document atomic writes. WiredTiger serializes them, so parallel
- * requests can neither collide nor raise write conflicts (code 112) —
- * unlike counter updates inside multi-document transactions.
- *
- * Trade-off: a business transaction that aborts after consuming a number
- * leaves a gap. Gaps are safe (numbers are never reused); stock
- * pre-validation upstream keeps burns rare.
- *
- * FY rollover is race-safe: exactly one request wins the $ne-guarded reset
- * (seq 1); losers fall through to the increment path (seq 2, 3, ...).
- * Returns { number, prefix, fy, seq }.
- */
-export const getNextDocumentNumber = async (docType, refDate = new Date()) => {
-  const config = DOCUMENT_TYPES[docType];
-  if (!config) throw new Error(`Unknown document type: ${docType}`);
-  const fy = getFinancialYearStart(refDate);
-
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    // Fast path: FY already current — atomic increment.
-    const current = await CompanySettings.findOneAndUpdate(
-      { isSingleton: true, [config.fyField]: fy },
-      { $inc: { [config.nextField]: 1 } },
-      { new: true }
-    );
-    if (current) {
-      const seq = current[config.nextField] - 1;
-      const prefix = current[config.prefixField] || config.defaultPrefix;
-      return { number: formatDocumentNumber(prefix, fy, seq), prefix, fy, seq };
-    }
-
-    // FY rollover (or first use): exactly one request wins the reset.
-    const rolled = await CompanySettings.findOneAndUpdate(
-      { isSingleton: true, [config.fyField]: { $ne: fy } },
-      { $set: { [config.fyField]: fy, [config.nextField]: 2 } },
-      { new: true }
-    );
-    if (rolled) {
-      const prefix = rolled[config.prefixField] || config.defaultPrefix;
-      return { number: formatDocumentNumber(prefix, fy, 1), prefix, fy, seq: 1 };
-    }
-
-    // Singleton missing (or lost a creation race): create-or-ignore, then loop.
-    try {
-      await CompanySettings.create({ isSingleton: true });
-    } catch (error) {
-      if (error.code !== 11000) throw error;
-    }
-  }
-  throw new Error(`Could not allocate a ${docType} document number after retries`);
+const resolveSettings = async () => {
+  let settings = await CompanySettings.findOne();
+  if (!settings) settings = await CompanySettings.create({ isSingleton: true });
+  return settings;
 };
 
-/** Preview the next number WITHOUT consuming it. */
+/**
+ * Atomically consume the next per-day sequence for a document type.
+ *
+ * Counter operations run WITHOUT the caller's transaction session, as
+ * single-document atomic upserts. Concurrent requests serialize on the
+ * counter document and each receives a distinct sequence.
+ *
+ * Resolves prefix + timezone from CompanySettings (override via opts).
+ * The sequence bucket is keyed on the DOCUMENT date (not "now"), so
+ * backdated documents consume that date's series.
+ *
+ * Throws 409 when the day's series is exhausted (999 used) — an admin must
+ * configure another series (prefix); the ceiling value 1000 is never issued.
+ *
+ * Returns { number, prefix, fy, fyCode, fyLabel, dateKey, mmdd, seq, documentDate }.
+ */
+export const getNextDocumentNumber = async (docType, refDate = new Date(), opts = {}) => {
+  const config = DOCUMENT_TYPES[docType];
+  if (!config) throw new Error(`Unknown document type: ${docType}`);
+  const settings = opts.settings || await resolveSettings();
+  const timezone = opts.timezone || settings?.timezone || DEFAULT_TIMEZONE;
+  const prefix = (opts.prefix || settings?.[config.prefixField] || config.defaultPrefix).toUpperCase();
+
+  const businessDate = new Date(refDate || new Date());
+  const { y, m, d } = getBusinessDateParts(businessDate, timezone);
+  const fy = m >= 4 ? y : y - 1;
+  const fyCode = getFinancialYearCode(fy);
+  const dateKey = getDateKey(y, m, d);
+  const mmdd = getMMDD(m, d);
+
+  const key = `${docType}:${prefix}:${fyCode}:${dateKey}`;
+  const counter = await DocumentCounter.findOneAndUpdate(
+    { _id: key },
+    { $inc: { seq: 1 } },
+    { returnDocument: 'after', upsert: true },
+  );
+  const seq = counter.seq;
+  if (seq > MAX_DAILY_SEQUENCE) {
+    throw new ApiError(
+      409,
+      `Daily sequence exhausted for ${prefix} on ${getFinancialYearLabel(fy)} ${mmdd} (${MAX_DAILY_SEQUENCE} documents already issued). ` +
+      `Ask an administrator to configure another series (prefix) for continued billing — numbers are never reused.`,
+    );
+  }
+  return {
+    number: formatDocumentNumber(prefix, fyCode, mmdd, seq),
+    prefix, fy, fyCode, fyLabel: getFinancialYearLabel(fy), dateKey, mmdd, seq,
+    documentDate: businessDate,
+    timezone,
+  };
+};
+
+/** Read the would-be next sequence for a type+date WITHOUT consuming it. */
+export const peekNextSequence = async (docType, prefix, fyCode, dateKey) => {
+  const counter = await DocumentCounter.findOne({
+    _id: `${docType}:${prefix}:${fyCode}:${dateKey}`,
+  }).lean();
+  return (counter?.seq || 0) + 1;
+};
+
+/**
+ * Preview the next number for every document type WITHOUT consuming it.
+ * Uses today's business date. Returns per-type:
+ * { prefix, label, fy, fyLabel, fyCode, dateKey, mmdd, nextSeq, preview, exhausted }.
+ */
 export const previewNextDocumentNumber = (settings, docType, refDate = new Date()) => {
   const config = DOCUMENT_TYPES[docType];
   if (!config) return '';
-  const fy = getFinancialYearStart(refDate);
-  const prefix = settings?.[config.prefixField] || config.defaultPrefix;
-  const storedFy = settings?.[config.fyField];
-  const next = storedFy === fy ? settings?.[config.nextField] || 1 : 1;
-  return formatDocumentNumber(prefix, fy, next);
+  const timezone = settings?.timezone || DEFAULT_TIMEZONE;
+  const prefix = (settings?.[config.prefixField] || config.defaultPrefix).toUpperCase();
+  const { y, m, d } = getBusinessDateParts(refDate, timezone);
+  const fy = m >= 4 ? y : y - 1;
+  const fyCode = getFinancialYearCode(fy);
+  return {
+    prefix,
+    label: config.label,
+    fy,
+    fyLabel: getFinancialYearLabel(fy),
+    fyCode,
+    dateKey: getDateKey(y, m, d),
+    mmdd: getMMDD(m, d),
+    timezone,
+  };
+};
+
+/** Full async preview (includes live next sequence + formatted number). */
+export const previewAllSequences = async (settings, refDate = new Date()) => {
+  const out = {};
+  for (const [key, config] of Object.entries(DOCUMENT_TYPES)) {
+    const base = previewNextDocumentNumber(settings, key, refDate);
+    const nextSeq = await peekNextSequence(key, base.prefix, base.fyCode, base.dateKey);
+    out[key] = {
+      ...base,
+      nextSeq,
+      exhausted: nextSeq > MAX_DAILY_SEQUENCE,
+      preview: nextSeq > MAX_DAILY_SEQUENCE
+        ? null
+        : formatDocumentNumber(base.prefix, base.fyCode, base.mmdd, nextSeq),
+    };
+  }
+  return out;
 };

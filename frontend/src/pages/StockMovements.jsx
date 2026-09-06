@@ -75,6 +75,7 @@ const StockMovements = () => {
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stream</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Type</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Quantity</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Sec Qty</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Source</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Remarks</th>
               </tr>
@@ -82,11 +83,11 @@ const StockMovements = () => {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {movementsLoading && movements.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-slate-500 text-sm">Loading movements...</td>
+                  <td colSpan="8" className="py-8 text-center text-slate-500 text-sm">Loading movements...</td>
                 </tr>
               ) : movements.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-slate-500 text-sm">No stock movements found.</td>
+                  <td colSpan="8" className="py-8 text-center text-slate-500 text-sm">No stock movements found.</td>
                 </tr>
               ) : (
                 movements.map((m) => (
@@ -115,6 +116,11 @@ const StockMovements = () => {
                     <td className="py-4 px-6 text-right">
                       <span className={`text-sm font-bold font-mono ${m.quantity > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <span className="text-sm font-mono text-slate-500">
+                        {(m.secondaryQuantity || 0) !== 0 ? (m.secondaryQuantity > 0 ? `+${m.secondaryQuantity}` : m.secondaryQuantity) : '—'}
                       </span>
                     </td>
                     <td className="py-4 px-6">

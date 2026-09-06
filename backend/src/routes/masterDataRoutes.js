@@ -26,7 +26,7 @@ const supplierController = crudFactory(Supplier, 'Supplier', [], { auditEntity: 
 const categoryController = crudFactory(Category, 'Category', [], { auditEntity: 'Category' });
 const brandController = crudFactory(Brand, 'Brand', [], { auditEntity: 'Brand' });
 const unitController = crudFactory(Unit, 'Unit', [], { auditEntity: 'Unit' });
-const productController = crudFactory(Product, 'Product', ['category', 'brand', 'unit'], {
+const productController = crudFactory(Product, 'Product', ['category', 'brand', 'unit', 'secondaryUnit'], {
   guardedFields: ['taxStock', 'estimateStock', 'averageCostTax', 'averageCostEst'],
   auditEntity: 'Product',
 });

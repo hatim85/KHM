@@ -10,6 +10,7 @@ const TaxBills = () => {
   const { data: sales, loading, error } = useSelector(state => state.sales);
   const [statusFilter, setStatusFilter] = useState('');
   const [payFilter, setPayFilter] = useState('');
+  const [billTypeFilter, setBillTypeFilter] = useState('');
   const [offlineBills, setOfflineBills] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -27,13 +28,14 @@ const TaxBills = () => {
   };
 
   useEffect(() => {
-    // Only fetch TAX bills
+    // Only fetch TAX bills (includes Bills of Supply — same stream, BOS- series)
     const filters = { stream: 'TAX' };
     if (statusFilter) filters.status = statusFilter;
     if (payFilter) filters.paymentStatus = payFilter;
+    if (billTypeFilter) filters.billType = billTypeFilter;
     dispatch(fetchSales(filters));
     checkOfflineBills();
-  }, [dispatch, statusFilter, payFilter]);
+  }, [dispatch, statusFilter, payFilter, billTypeFilter]);
 
   const syncOfflineBills = async () => {
     if (!navigator.onLine) {
@@ -59,7 +61,8 @@ const TaxBills = () => {
   };
 
   const handleCancel = async (sale) => {
-    if (!window.confirm(`Cancel tax invoice ${sale.invoiceNumber}? Its number is retained and never reused. Paid bills must have payments reversed first.`)) return;
+    const label = sale.billType === 'BILL_OF_SUPPLY' ? 'bill of supply' : 'tax invoice';
+    if (!window.confirm(`Cancel ${label} ${sale.invoiceNumber}? Its number is retained and never reused. Paid bills must have payments reversed first.`)) return;
     const result = await dispatch(cancelSale(sale._id));
     if (result.error) {
       alert(typeof result.payload === 'string' ? result.payload : 'Cancellation failed.');
@@ -67,6 +70,7 @@ const TaxBills = () => {
       const filters = { stream: 'TAX' };
       if (statusFilter) filters.status = statusFilter;
       if (payFilter) filters.paymentStatus = payFilter;
+      if (billTypeFilter) filters.billType = billTypeFilter;
       dispatch(fetchSales(filters));
     }
   };
@@ -91,8 +95,8 @@ const TaxBills = () => {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Tax Bills (GST Invoices)</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage B2B/B2C official GST sales and tax stock reduction.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Tax Bills (GST Invoices & Bills of Supply)</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Tax invoices for GST items and Bills of Supply for 0% GST exempt items. Bills of Supply carry the Notification No. 12/2017 exemption note.</p>
         </div>
         <Link
           to="/sales/tax/new"
@@ -124,6 +128,18 @@ const TaxBills = () => {
           </select>
         </div>
         <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Doc Type</label>
+          <select
+            value={billTypeFilter}
+            onChange={(e) => setBillTypeFilter(e.target.value)}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          >
+            <option value="">All</option>
+            <option value="TAX_INVOICE">Tax Invoice</option>
+            <option value="BILL_OF_SUPPLY">Bill of Supply</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment</label>
           <select
             value={payFilter}
@@ -147,6 +163,7 @@ const TaxBills = () => {
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Customer</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invoice #</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Type</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Taxable</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">GST</th>
@@ -158,11 +175,11 @@ const TaxBills = () => {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {loading && sales.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-slate-500 text-sm">Loading invoices...</td>
+                  <td colSpan="10" className="py-8 text-center text-slate-500 text-sm">Loading invoices...</td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-slate-500 text-sm">No tax bills found.</td>
+                  <td colSpan="10" className="py-8 text-center text-slate-500 text-sm">No tax bills found.</td>
                 </tr>
               ) : (
                 sales.map((sale) => (
@@ -175,6 +192,17 @@ const TaxBills = () => {
                     </td>
                     <td className="py-4 px-6">
                       <p className="text-sm font-mono text-slate-500 dark:text-slate-400">{sale.invoiceNumber}</p>
+                    </td>
+                    <td className="py-4 px-6">
+                      {sale.billType === 'BILL_OF_SUPPLY' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" title="0% GST exempt — carries the Notification No. 12/2017 exemption note">
+                          BILL OF SUPPLY
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                          TAX INVOICE
+                        </span>
+                      )}
                     </td>
                     <td className="py-4 px-6">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${

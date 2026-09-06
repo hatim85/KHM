@@ -91,7 +91,7 @@ const crudFactory = (Model, modelName = 'Document', populateFields = [], options
     update: async (req, res, next) => {
       try {
         const doc = await Model.findByIdAndUpdate(req.params.id, sanitize(req.body), {
-          new: true,
+          returnDocument: 'after',
           runValidators: true,
         });
         if (!doc) {

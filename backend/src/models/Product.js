@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import ApiError from '../utils/ApiError.js';
 
 const productSchema = new mongoose.Schema({
   sku: {
@@ -37,6 +38,21 @@ const productSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Unit',
     required: true,
+    // Primary / billing UOM. Inventory pools are counted in this unit.
+  },
+  // Optional secondary / measured UOM (e.g. primary PCS, measured KG).
+  // No fixed conversion is assumed anywhere — every transaction records
+  // the ACTUAL secondary quantity measured for that line.
+  secondaryUnit: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Unit',
+    default: null,
+  },
+  // Which unit the selling/purchase rate is quoted in.
+  pricingBasis: {
+    type: String,
+    enum: ['PRIMARY', 'SECONDARY'],
+    default: 'PRIMARY',
   },
   hsnCode: {
     type: String,
@@ -94,6 +110,28 @@ const productSchema = new mongoose.Schema({
     default: true,
   },
 }, { timestamps: true });
+
+// SECONDARY pricing is meaningless without a secondary unit.
+productSchema.pre('save', function () {
+  if (this.pricingBasis === 'SECONDARY' && !this.secondaryUnit) {
+    throw new ApiError(400, 'Pricing basis SECONDARY requires a secondary unit.');
+  }
+  if (!this.secondaryUnit && this.pricingBasis !== 'PRIMARY') {
+    this.pricingBasis = 'PRIMARY';
+  }
+});
+
+productSchema.pre('findOneAndUpdate', async function () {
+  const update = this.getUpdate() || {};
+  const set = update.$set || update;
+  if (set.pricingBasis === undefined && set.secondaryUnit === undefined) return;
+  const doc = await this.model.findOne(this.getQuery()).lean();
+  const basis = set.pricingBasis ?? doc?.pricingBasis ?? 'PRIMARY';
+  const sec = set.secondaryUnit !== undefined ? set.secondaryUnit : doc?.secondaryUnit;
+  if (basis === 'SECONDARY' && !sec) {
+    throw new ApiError(400, 'Pricing basis SECONDARY requires a secondary unit.');
+  }
+});
 
 const Product = mongoose.model('Product', productSchema);
 export default Product;

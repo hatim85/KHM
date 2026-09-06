@@ -8,7 +8,7 @@ import { ArrowLeftIcon, XIcon, PlusIcon, CheckIcon, PencilIcon } from '../compon
 const PurchaseForm = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  
+
   const { data: suppliers } = useSelector(state => state.masterData.suppliers);
   const { data: products } = useSelector(state => state.masterData.products);
   const { loading, error } = useSelector(state => state.purchases);
@@ -23,7 +23,7 @@ const PurchaseForm = () => {
   });
 
   const [items, setItems] = useState([
-    { product: '', quantity: 1, rate: 0, taxRate: 0 }
+    { product: '', quantity: 1, rate: 0, taxRate: 0, secondaryQty: 0 }
   ]);
 
   useEffect(() => {
@@ -54,7 +54,7 @@ const PurchaseForm = () => {
     products.filter((p) => p._id === items[index].product || !items.some((o, j) => j !== index && o.product === p._id));
 
   const addItemRow = () => {
-    setItems([...items, { product: '', quantity: 1, rate: 0, taxRate: 0 }]);
+    setItems([...items, { product: '', quantity: 1, rate: 0, taxRate: 0, secondaryQty: 0 }]);
   };
 
   const removeItemRow = (index) => {
@@ -63,7 +63,7 @@ const PurchaseForm = () => {
     }
   };
 
-  // Calculations
+  // Calculations (preview mirrors backend pricing: rate follows pricingBasis)
   const isTax = formData.transactionType === 'TAX';
   let subTotal = 0;
   let taxTotal = 0;
@@ -71,12 +71,15 @@ const PurchaseForm = () => {
   const calculatedItems = items.map(item => {
     const rate = parseFloat(item.rate) || 0;
     const qty = parseFloat(item.quantity) || 0;
-    const lineTotal = rate * qty;
+    const prod = products.find(p => p._id === item.product);
+    const sec = parseFloat(item.secondaryQty) || 0;
+    const billQty = prod?.pricingBasis === 'SECONDARY' ? sec : qty;
+    const lineTotal = rate * billQty;
     const lineTax = isTax ? (lineTotal * (item.taxRate / 100)) : 0;
-    
+
     subTotal += lineTotal;
     taxTotal += lineTax;
-    
+
     return {
       ...item,
       lineTotal,
@@ -98,7 +101,8 @@ const PurchaseForm = () => {
         product: i.product,
         quantity: Number(i.quantity),
         rate: Math.round(Number(i.rate) * 100),
-        taxRate: Number(i.taxRate)
+        taxRate: Number(i.taxRate),
+        secondaryQty: Number(i.secondaryQty) || 0,
       }))
     };
 
@@ -127,7 +131,7 @@ const PurchaseForm = () => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        
+
         {/* Document Header */}
         <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-4 gap-6 relative overflow-hidden">
           {/* Decorative stream indicator */}
@@ -135,13 +139,12 @@ const PurchaseForm = () => {
 
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Stream / Ledger</label>
-            <select 
-              value={formData.transactionType} 
-              onChange={(e) => setFormData({...formData, transactionType: e.target.value})}
-              className={`w-full border focus:ring-2 rounded-xl px-4 py-2.5 text-sm outline-none transition appearance-none font-bold ${
-                isTax ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 focus:border-indigo-500 focus:ring-indigo-500/20' : 
-                'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 focus:border-amber-500 focus:ring-amber-500/20'
-              }`}
+            <select
+              value={formData.transactionType}
+              onChange={(e) => setFormData({ ...formData, transactionType: e.target.value })}
+              className={`w-full border focus:ring-2 rounded-xl px-4 py-2.5 text-sm outline-none transition appearance-none font-bold ${isTax ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 focus:border-indigo-500 focus:ring-indigo-500/20' :
+                  'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 focus:border-amber-500 focus:ring-amber-500/20'
+                }`}
             >
               <option value="TAX">TAX INVOICE (With GST)</option>
               <option value="ESTIMATE">ESTIMATED BILL (No GST)</option>
@@ -153,7 +156,7 @@ const PurchaseForm = () => {
 
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Supplier *</label>
-            <select required value={formData.supplier} onChange={(e) => setFormData({...formData, supplier: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+            <select required value={formData.supplier} onChange={(e) => setFormData({ ...formData, supplier: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
               <option value="">Select Supplier</option>
               {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
             </select>
@@ -161,12 +164,12 @@ const PurchaseForm = () => {
 
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Invoice Number *</label>
-            <input required type="text" value={formData.invoiceNumber} onChange={(e) => setFormData({...formData, invoiceNumber: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" />
+            <input required type="text" value={formData.invoiceNumber} onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" />
           </div>
 
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Invoice Date *</label>
-            <input required type="date" value={formData.invoiceDate} onChange={(e) => setFormData({...formData, invoiceDate: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]" />
+            <input required type="date" value={formData.invoiceDate} onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]" />
           </div>
         </div>
 
@@ -177,7 +180,8 @@ const PurchaseForm = () => {
               <thead>
                 <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                   <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-12">#</th>
-                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[250px]">Product Item</th>
+                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[150px]">Product Item</th>
+                  <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-23">Specification</th>
                   <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-32">Qty</th>
                   <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-40">Rate (₹)</th>
                   {isTax && (
@@ -200,22 +204,80 @@ const PurchaseForm = () => {
                         {availableProducts(index).map(p => <option key={p._id} value={p._id}>{p.name} {p.sku ? `(${p.sku})` : ''}</option>)}
                       </select>
                     </td>
+                    <td className="py-3 px-6 text-sm text-slate-500 dark:text-slate-400">
+                      {(() => {
+                        const sp = products.find(p => p._id === item.product);
+                        return sp?.specification || '-';
+                      })()}
+                    </td>
                     <td className="py-3 px-6">
-                      <input required type="number" min="1" step="any" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
+                      <div className="space-y-2">
+
+                        {/* Primary Quantity */}
+                        <div>
+                          <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                            Qty ({products.find(p => p._id === item.product)?.unit?.shortName || 'unit'})
+                          </label>
+
+                          <input
+                            required
+                            type="number"
+                            min="1"
+                            step="any"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              handleItemChange(index, 'quantity', e.target.value)
+                            }
+                            className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+
+                        {/* Secondary Quantity */}
+                        {(() => {
+                          const sp = products.find(p => p._id === item.product);
+                          const secondaryUnit = sp?.secondaryUnit;
+                          const secondaryName = secondaryUnit?.shortName || '';
+
+                          if (!secondaryName) return null;
+
+                          return (
+                            <div>
+                              <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                                Secondary Qty ({secondaryName})
+                              </label>
+
+                              <input
+                                required={sp?.pricingBasis === 'SECONDARY'}
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={item.secondaryQty || ''}
+                                onChange={(e) =>
+                                  handleItemChange(index, 'secondaryQty', e.target.value)
+                                }
+                                placeholder={`Enter ${secondaryName}`}
+                                title={`Measured quantity in ${secondaryName}`}
+                                className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-slate-900 dark:text-white outline-none font-mono"
+                              />
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </td>
                     <td className="py-3 px-6">
                       <input required type="number" min="0" step="0.01" value={item.rate} onChange={(e) => handleItemChange(index, 'rate', e.target.value)} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none font-mono" />
+                      {(() => {
+                        const sp = products.find(p => p._id === item.product);
+                        const bu = sp?.pricingBasis === 'SECONDARY' && sp?.secondaryUnit?.shortName
+                          ? sp.secondaryUnit.shortName
+                          : (sp?.unit?.shortName || '');
+                        return bu ? <p className="text-[10px] text-slate-500 mt-1">per {bu}</p> : null;
+                      })()}
                     </td>
                     {isTax && (
                       <>
                         <td className="py-3 px-6">
-                          <select value={item.taxRate} onChange={(e) => handleItemChange(index, 'taxRate', e.target.value)} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none font-mono">
-                            <option value="0">0%</option>
-                            <option value="5">5%</option>
-                            <option value="12">12%</option>
-                            <option value="18">18%</option>
-                            <option value="28">28%</option>
-                          </select>
+                          <span value={item.taxRate} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none font-mono">{item.taxRate}</span>
                         </td>
                         <td className="py-3 px-6 text-right">
                           <span className="text-sm text-slate-500 dark:text-slate-400 font-mono">{item.lineTax.toFixed(2)}</span>
@@ -235,7 +297,7 @@ const PurchaseForm = () => {
               </tbody>
             </table>
           </div>
-          
+
           <div className="p-4 bg-slate-100 dark:bg-slate-800/20 border-t border-slate-200 dark:border-slate-800">
             <button type="button" onClick={addItemRow} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-300 text-sm font-medium flex items-center gap-1 transition">
               <PlusIcon size={15} /> Add another line
@@ -248,13 +310,13 @@ const PurchaseForm = () => {
           <div className="lg:col-span-2 space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Remarks / Notes</label>
-              <textarea rows="3" value={formData.remarks} onChange={(e) => setFormData({...formData, remarks: e.target.value})} className="w-full bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 rounded-2xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none resize-none"></textarea>
+              <textarea rows="3" value={formData.remarks} onChange={(e) => setFormData({ ...formData, remarks: e.target.value })} className="w-full bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 rounded-2xl px-4 py-3 text-sm text-slate-900 dark:text-white outline-none resize-none"></textarea>
             </div>
-            
+
             <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center gap-4">
               <div className="flex-1">
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Document Status</label>
-                <select value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none font-medium">
+                <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none font-medium">
                   <option value="DRAFT">Save as Draft (No stock movement)</option>
                   <option value="COMPLETED">Completed (Adds stock & updates ledgers)</option>
                 </select>

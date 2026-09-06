@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import { fetchReturns, fetchReturnable, createSalesReturn, createPurchaseReturn } from '../features/returnsSlice';
 import { PlusIcon, XIcon } from '../components/icons';
 import { fetchSales } from '../features/salesSlice';
@@ -128,13 +129,14 @@ const Returns = () => {
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stream</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Total</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Reason</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Note</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {loading && returns.length === 0 ? (
-                <tr><td colSpan="7" className="py-8 text-center text-slate-500 text-sm">Loading returns...</td></tr>
+                <tr><td colSpan="8" className="py-8 text-center text-slate-500 text-sm">Loading returns...</td></tr>
               ) : returns.length === 0 ? (
-                <tr><td colSpan="7" className="py-8 text-center text-slate-500 text-sm">No returns found.</td></tr>
+                <tr><td colSpan="8" className="py-8 text-center text-slate-500 text-sm">No returns found.</td></tr>
               ) : (
                 returns.map((r) => (
                   <tr key={r._id} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
@@ -149,6 +151,17 @@ const Returns = () => {
                     </td>
                     <td className="py-4 px-6 text-right text-sm font-bold text-slate-900 dark:text-white">₹{(r.grandTotal / 100).toFixed(2)}</td>
                     <td className="py-4 px-6 text-sm text-slate-500 dark:text-slate-400 truncate max-w-xs" title={r.reason}>{r.reason}</td>
+                    <td className="py-4 px-6 text-center">
+                      <Link
+                        to={isSales
+                          ? `/notes/new?type=CREDIT_NOTE&partyId=${r.customer || ''}&originalId=${r.originalDocument || ''}&returnId=${r._id}`
+                          : `/notes/new?type=DEBIT_NOTE&partyId=${r.supplier || ''}&originalId=${r.originalDocument || ''}&returnId=${r._id}`}
+                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-300 transition text-xs font-medium"
+                        title={isSales ? 'Create a linked Credit Note (financial adjustment — optional, never automatic)' : 'Create a linked Debit Note (financial adjustment — optional, never automatic)'}
+                      >
+                        + {isSales ? 'Credit Note' : 'Debit Note'}
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

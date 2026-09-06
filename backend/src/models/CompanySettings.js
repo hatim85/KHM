@@ -50,37 +50,42 @@ const companySettingsSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
-  
-  // Invoice Sequence Counters (financial-year-aware; each stream independent)
+  timezone: {
+    type: String,
+    default: 'Asia/Kolkata',
+    // IANA business timezone driving document dates + financial years.
+  },
+
+  // Document series prefixes (production numbering: PREFIX-FYMMDD-SEQ).
+  // Per-day sequences live in the DocumentCounter collection (001–999);
+  // changing a prefix starts a fresh independent series.
   // Estimated Bills
   estimatePrefix: { type: String, default: 'EST-', validate: prefixValidator },
-  estimateNextNumber: { type: Number, default: 1, min: 1 },
-  estimateFY: { type: Number, default: null },
-  
+
   // Tax Invoices
   taxInvoicePrefix: { type: String, default: 'INV-', validate: prefixValidator },
-  taxInvoiceNextNumber: { type: Number, default: 1, min: 1 },
-  taxInvoiceFY: { type: Number, default: null },
-  
-  // Sales Returns
+
+  // Bills of Supply (0%-GST / exempt lines of TAX sales).
+  // Numbered in their own BOS- series; stock + ledger stay in the TAX stream.
+  supplyPrefix: { type: String, default: 'BOS-', validate: prefixValidator },
+
+  // Sales Returns (inventory returns — separate from Credit Notes)
   salesReturnPrefix: { type: String, default: 'SR-', validate: prefixValidator },
-  salesReturnNextNumber: { type: Number, default: 1, min: 1 },
-  salesReturnFY: { type: Number, default: null },
-  
-  // Purchase Returns
+
+  // Purchase Returns (inventory returns — separate from Debit Notes)
   purchaseReturnPrefix: { type: String, default: 'PR-', validate: prefixValidator },
-  purchaseReturnNextNumber: { type: Number, default: 1, min: 1 },
-  purchaseReturnFY: { type: Number, default: null },
+
+  // Credit Notes (financial/GST downward adjustments on sales)
+  creditNotePrefix: { type: String, default: 'CN-', validate: prefixValidator },
+
+  // Debit Notes (financial/GST adjustments on purchases)
+  debitNotePrefix: { type: String, default: 'DN-', validate: prefixValidator },
 
   // Receipt Vouchers
   receiptPrefix: { type: String, default: 'REC-', validate: prefixValidator },
-  receiptNextNumber: { type: Number, default: 1, min: 1 },
-  receiptFY: { type: Number, default: null },
 
   // Payment Vouchers
   paymentPrefix: { type: String, default: 'PAY-', validate: prefixValidator },
-  paymentNextNumber: { type: Number, default: 1, min: 1 },
-  paymentFY: { type: Number, default: null },
 
   // Google Drive OAuth (server-side only — never exposed to frontend)
   googleRefreshToken: { type: String, default: '', select: false },

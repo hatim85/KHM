@@ -122,7 +122,7 @@ const Reports = () => {
           { header: 'GST', align: 'right', render: r => formatMoney(r.totalCgst + r.totalSgst + r.totalIgst) },
           { header: 'Total', align: 'right', render: r => <span className="font-bold font-mono text-slate-900 dark:text-white">{formatMoney(r.grandTotal)}</span> },
           { header: 'Paid', align: 'right', render: r => formatMoney(r.amountPaid || 0) },
-          { header: 'Outstanding', align: 'right', render: r => <span className="text-amber-600 dark:text-amber-400">{formatMoney(r.grandTotal - (r.amountPaid || 0) - (r.returnedAmount || 0))}</span> },
+          { header: 'Outstanding', align: 'right', render: r => <span className="text-amber-600 dark:text-amber-400">{formatMoney(r.grandTotal - (r.amountPaid || 0) - (r.returnedAmount || 0) - (r.creditNoteAmount || 0) - (r.debitNoteAmount || 0))}</span> },
           { header: 'Pay Status', render: r => (
             <span className={`px-2 py-1 text-xs rounded font-bold ${
               r.paymentStatus === 'PAID' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 
@@ -148,7 +148,7 @@ const Reports = () => {
           { header: 'Customer', render: r => r.customerSnapshot?.name || r.customer?.name },
             { header: 'Total Sale Value', align: 'right', render: r => <span className="font-bold font-mono text-slate-900 dark:text-white">{formatMoney(r.grandTotal)}</span> },
             { header: 'Paid', align: 'right', render: r => formatMoney(r.amountPaid || 0) },
-            { header: 'Outstanding', align: 'right', render: r => <span className="text-amber-600 dark:text-amber-400">{formatMoney(r.grandTotal - (r.amountPaid || 0) - (r.returnedAmount || 0))}</span> },
+            { header: 'Outstanding', align: 'right', render: r => <span className="text-amber-600 dark:text-amber-400">{formatMoney(r.grandTotal - (r.amountPaid || 0) - (r.returnedAmount || 0) - (r.creditNoteAmount || 0))}</span> },
             { header: 'Pay Status', render: r => (
               <span className={`px-2 py-1 text-xs rounded font-bold ${
                 r.paymentStatus === 'PAID' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 
@@ -251,7 +251,7 @@ const Reports = () => {
               { header: 'Tax', align: 'right', render: r => formatMoney(r.taxTotal || 0) },
               { header: 'Total', align: 'right', render: r => <span className="font-bold font-mono text-slate-900 dark:text-white">{formatMoney(r.grandTotal)}</span> },
               { header: 'Paid', align: 'right', render: r => formatMoney(r.amountPaid || 0) },
-              { header: 'Outstanding', align: 'right', render: r => <span className="text-amber-600 dark:text-amber-400">{formatMoney(r.grandTotal - (r.amountPaid || 0) - (r.returnedAmount || 0))}</span> },
+              { header: 'Outstanding', align: 'right', render: r => <span className="text-amber-600 dark:text-amber-400">{formatMoney(r.grandTotal - (r.amountPaid || 0) - (r.returnedAmount || 0) - (r.debitNoteAmount || 0))}</span> },
               { header: 'Pay Status', render: r => (
                 <span className={`px-2 py-1 text-xs rounded font-bold ${
                   r.paymentStatus === 'PAID' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 
@@ -311,7 +311,7 @@ const Reports = () => {
         {activeTab === 'gst' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-2">GST Summary (Tax Invoices Only)</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Estimates are completely excluded from this report.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Estimates are completely excluded. Bills of Supply (0% GST exempt) are shown separately and never add to output tax.</p>
             {gstLoading ? <div className="p-8 text-slate-500 dark:text-slate-400">Loading GST...</div> : gstRes?.data ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
@@ -322,12 +322,19 @@ const Reports = () => {
                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">SGST</span><span className="font-mono text-slate-900 dark:text-white">{formatMoney(gstRes.data.outputGst?.sgst)}</span></div>
                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">IGST</span><span className="font-mono text-slate-900 dark:text-white">{formatMoney(gstRes.data.outputGst?.igst)}</span></div>
                     <div className="flex justify-between pt-2 border-t border-slate-300 dark:border-slate-700"><span className="text-slate-900 dark:text-white font-bold">Total Output</span><span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{formatMoney(gstRes.data.outputGst?.total)}</span></div>
+                    <div className="flex justify-between pt-2 mt-2 border-t border-dashed border-slate-300 dark:border-slate-700"><span className="text-emerald-600 dark:text-emerald-400">Exempt (Bills of Supply{typeof gstRes.data.exemptSupplies?.count === 'number' ? ` · ${gstRes.data.exemptSupplies.count}` : ''})</span><span className="font-mono text-emerald-600 dark:text-emerald-400">{formatMoney(gstRes.data.exemptSupplies?.exemptValue)}</span></div>
+                    {(gstRes.data.creditNotes?.total > 0 || gstRes.data.creditNotes?.taxableValue > 0) && (
+                      <div className="flex justify-between"><span className="text-rose-600 dark:text-rose-400">Less: Credit Notes</span><span className="font-mono text-rose-600 dark:text-rose-400">- {formatMoney(gstRes.data.creditNotes?.total)}</span></div>
+                    )}
                   </div>
                 </div>
                 <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
                   <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Input Tax Credit (Purchases)</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Taxable Value</span><span className="font-mono text-slate-900 dark:text-white">{formatMoney(gstRes.data.inputTaxCredit?.taxableValue)}</span></div>
+                    {(gstRes.data.debitNotes?.total > 0 || gstRes.data.debitNotes?.taxableValue > 0) && (
+                      <div className="flex justify-between"><span className="text-amber-600 dark:text-amber-400">Add: Debit Notes</span><span className="font-mono text-amber-600 dark:text-amber-400">+ {formatMoney(gstRes.data.debitNotes?.total)}</span></div>
+                    )}
                     <div className="flex justify-between pt-2 border-t border-slate-300 dark:border-slate-700"><span className="text-slate-900 dark:text-white font-bold">Total ITC</span><span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(gstRes.data.inputTaxCredit?.total)}</span></div>
                   </div>
                 </div>
@@ -396,6 +403,7 @@ const Reports = () => {
                 { header: 'Product', render: r => r.name },
                 { header: 'SKU', render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.sku || '—'}</span> },
                 { header: 'Qty Sold', align: 'right', render: r => r.totalQuantity },
+                { header: 'Sec Qty', align: 'right', render: r => (r.totalSecondaryQuantity > 0 ? `${r.totalSecondaryQuantity} ${r.secondaryUnit || ''}` : '—') },
                 { header: 'Revenue (Taxable)', align: 'right', render: r => formatMoney(r.totalRevenue) },
                 { header: 'Avg Price', align: 'right', render: r => formatMoney(Math.round(r.averageSellingPrice || 0)) }
               ], 'Top Tax Products')}
@@ -406,6 +414,7 @@ const Reports = () => {
                 { header: 'Product', render: r => r.name },
                 { header: 'SKU', render: r => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{r.sku || '—'}</span> },
                 { header: 'Qty Sold', align: 'right', render: r => r.totalQuantity },
+                { header: 'Sec Qty', align: 'right', render: r => (r.totalSecondaryQuantity > 0 ? `${r.totalSecondaryQuantity} ${r.secondaryUnit || ''}` : '—') },
                 { header: 'Revenue (Total)', align: 'right', render: r => formatMoney(r.totalRevenue) },
                 { header: 'Avg Price', align: 'right', render: r => formatMoney(Math.round(r.averageSellingPrice || 0)) }
               ], 'Top Estimate Products')}

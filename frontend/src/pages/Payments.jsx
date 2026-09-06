@@ -81,7 +81,8 @@ const Payments = () => {
     const newAllocations = {};
 
     unpaidInvoices.forEach(inv => {
-      const outstanding = (inv.grandTotal - (inv.amountPaid || 0) - (inv.returnedAmount || 0)) / 100;
+      // Outstanding nets returns AND credit/debit-note adjustments.
+      const outstanding = (inv.grandTotal - (inv.amountPaid || 0) - (inv.returnedAmount || 0) - (inv.creditNoteAmount || 0) - (inv.debitNoteAmount || 0)) / 100;
       if (remaining > 0 && outstanding > 0) {
         const alloc = Math.min(remaining, outstanding);
         newAllocations[inv._id] = alloc;
@@ -342,7 +343,7 @@ const Payments = () => {
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                         {unpaidInvoices.map(inv => {
-                          const outstanding = (inv.grandTotal - (inv.amountPaid || 0) - (inv.returnedAmount || 0)) / 100;
+                          const outstanding = (inv.grandTotal - (inv.amountPaid || 0) - (inv.returnedAmount || 0) - (inv.creditNoteAmount || 0) - (inv.debitNoteAmount || 0)) / 100;
                           const currentAlloc = allocations[inv._id] || '';
                           return (
                             <tr key={inv._id} className="hover:bg-slate-800/40">

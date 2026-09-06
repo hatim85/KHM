@@ -11,6 +11,22 @@ const purchaseItemSchema = new mongoose.Schema({
     required: true,
     min: 1,
   },
+  // Actual measured secondary quantity for this line (0 when the product
+  // has no secondary UOM). No fixed primary↔secondary conversion exists.
+  secondaryQty: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  secondaryUnitName: {
+    type: String,
+    default: '',
+  },
+  pricingBasis: {
+    type: String,
+    enum: ['PRIMARY', 'SECONDARY'],
+    default: 'PRIMARY',
+  },
   rate: {
     type: Number,
     required: true,
@@ -74,8 +90,14 @@ const purchaseSchema = new mongoose.Schema({
     min: 0,
   },
   // Cumulative value credited back via Return documents (paise).
-  // Outstanding = grandTotal - amountPaid - returnedAmount.
+  // Outstanding = grandTotal - amountPaid - returnedAmount - debitNoteAmount.
   returnedAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  // Cumulative value adjusted via Debit Note documents (paise).
+  debitNoteAmount: {
     type: Number,
     default: 0,
     min: 0,

@@ -12,6 +12,7 @@ import ApiError from '../utils/ApiError.js';
 import { logAudit } from '../utils/auditLogger.js';
 import { getNextDocumentNumber } from '../utils/documentNumbering.js';
 import { isIntraStateSupply } from '../utils/gstMaster.js';
+import { applyGst } from '../services/lineItemService.js';
 import { applyStockIn, applyStockOut } from '../services/inventoryService.js';
 
 export const getReturns = async (req, res, next) => {
@@ -161,34 +162,33 @@ const createReturn = async ({ returnType, OriginalModel, originalId, items, reas
 
       const ref = origLines[0];
       const rate = Number(ref.rate);
-      const taxableValue = rate * qty;
+      const basis = ref.pricingBasis === 'SECONDARY' ? 'SECONDARY' : 'PRIMARY';
+      // Secondary quantity pro-rated from the original lines — no fixed
+      // primary<->secondary conversion is ever assumed.
+      const origSecTotal = origLines.reduce((sum, l) => sum + (Number(l.secondaryQty) || 0), 0);
+      const retSec = origSecTotal > 0 && soldQty > 0
+        ? Math.round((origSecTotal * qty / soldQty) * 1000) / 1000
+        : 0;
+      const secName = ref.secondaryUnitName || '';
+      const billBase = (basis === 'SECONDARY' ? retSec : qty) * rate;
       let gstRate = 0, cgst = 0, sgst = 0, igst = 0;
 
       if (stream === 'TAX') {
         if (isSale) {
           gstRate = Number(ref.gstRate) || 0;
-          const taxAmount = Math.round((taxableValue * gstRate) / 100);
-          // Mirror the original line's intra/inter pattern.
-          if (Number(ref.igst) > 0) {
-            igst = taxAmount;
-          } else {
-            cgst = Math.round(taxAmount / 2);
-            sgst = taxAmount - cgst;
-          }
+          const computed = applyGst({ billBase, gstRate, isTax: true, intra: Number(ref.igst) <= 0 });
+          cgst = computed.cgst; sgst = computed.sgst; igst = computed.igst;
         } else {
-          const taxRate = Number(ref.taxRate) || 0;
-          gstRate = taxRate;
-          const taxAmount = Math.round((taxableValue * taxRate) / 100);
+          gstRate = Number(ref.taxRate) || 0;
           const supplier = await Supplier.findById(original.supplier).session(session);
           const intra = isIntraStateSupply(settings?.stateCode || '24', supplier?.stateCode || settings?.stateCode || '24');
-          if (intra) {
-            cgst = Math.round(taxAmount / 2);
-            sgst = taxAmount - cgst;
-          } else {
-            igst = taxAmount;
-          }
+          // Purchase-return split by current master geography (the total is
+          // what matters for ITC; the original purchase stores rate only).
+          const computed = applyGst({ billBase, gstRate, isTax: true, intra });
+          cgst = computed.cgst; sgst = computed.sgst; igst = computed.igst;
         }
       }
+      const taxableValue = billBase;
 
       subTotal += taxableValue;
       totalCgst += cgst;
@@ -204,6 +204,9 @@ const createReturn = async ({ returnType, OriginalModel, originalId, items, reas
         product: line.product,
         quantity: qty,
         rate,
+        secondaryQty: retSec,
+        secondaryUnitName: secName,
+        pricingBasis: basis,
         taxableValue,
         gstRate,
         cgst,
@@ -218,6 +221,8 @@ const createReturn = async ({ returnType, OriginalModel, originalId, items, reas
     }
 
     const grandTotal = subTotal + totalCgst + totalSgst + totalIgst;
+    // Backend-generated production number (PREFIX-FYMMDD-SEQ), keyed on the
+    // return's business date. Never reused, never client-supplied.
     const generated = await getNextDocumentNumber(isSale ? 'SALES_RETURN' : 'PURCHASE_RETURN', returnDate ? new Date(returnDate) : new Date());
 
     const partySnapshot = {};
@@ -249,6 +254,7 @@ const createReturn = async ({ returnType, OriginalModel, originalId, items, reas
       stream,
       returnNumber: generated.number,
       financialYear: generated.fy,
+      documentDate: generated.documentDate,
       originalModel: isSale ? 'Sale' : 'Purchase',
       originalDocument: original._id,
       originalNumber: original.invoiceNumber,
@@ -275,6 +281,7 @@ const createReturn = async ({ returnType, OriginalModel, originalId, items, reas
         await applyStockIn({
           productId: item.product,
           quantity: item.quantity,
+          secondaryQuantity: item.secondaryQty || 0,
           unitCostPaise: null,
           stream,
           referenceDocument: ret._id,
@@ -285,6 +292,7 @@ const createReturn = async ({ returnType, OriginalModel, originalId, items, reas
         await applyStockOut({
           productId: item.product,
           quantity: item.quantity,
+          secondaryQuantity: item.secondaryQty || 0,
           stream,
           referenceDocument: ret._id,
           referenceModel: 'Return',

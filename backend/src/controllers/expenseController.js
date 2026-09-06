@@ -28,12 +28,13 @@ export const createExpenseCategory = async (req, res, next) => {
   }
 };
 
+
 export const updateExpenseCategory = async (req, res, next) => {
   try {
     const category = await ExpenseCategory.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
     if (!category) return next(new ApiError(404, 'Category not found'));
     res.json({ success: true, data: category });
@@ -132,7 +133,7 @@ export const updateExpense = async (req, res, next) => {
     const expense = await Expense.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).populate('category', 'name');
     
     if (!expense) return next(new ApiError(404, 'Expense not found'));

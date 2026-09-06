@@ -21,7 +21,13 @@ const stockMovementSchema = new mongoose.Schema({
   quantity: {
     type: Number,
     required: true,
-    // Negative for OUT, Positive for IN
+    // Primary-unit movement. Negative for OUT, Positive for IN.
+  },
+  secondaryQuantity: {
+    type: Number,
+    default: 0,
+    // Measured secondary-unit movement, same sign as quantity.
+    // 0 when the product has no secondary UOM configured.
   },
   unitCost: {
     type: Number,

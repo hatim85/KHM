@@ -62,7 +62,12 @@ const EstimatedBills = () => {
     if (!window.confirm(`Convert estimate ${sale.invoiceNumber} into a NEW tax invoice? The estimate is preserved; stock is not moved twice.`)) return;
     const result = await dispatch(convertEstimate(sale._id));
     if (!result.error) {
-      alert(`Converted to tax invoice ${result.payload.invoiceNumber}`);
+      const split = result.payload?.splitBills || (result.payload?.data ? [result.payload.data] : []);
+      if (split.length > 1) {
+        alert(`Converted with GST split:\n• Tax Invoice ${split.find((s) => s.billType !== 'BILL_OF_SUPPLY')?.invoiceNumber}\n• Bill of Supply ${split.find((s) => s.billType === 'BILL_OF_SUPPLY')?.invoiceNumber} (0% GST items)`);
+      } else {
+        alert(`Converted to ${split[0]?.billType === 'BILL_OF_SUPPLY' ? 'bill of supply' : 'tax invoice'} ${split[0]?.invoiceNumber}`);
+      }
       dispatch(fetchSales({ stream: 'ESTIMATE' }));
     }
   };

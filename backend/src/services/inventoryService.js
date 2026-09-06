@@ -30,7 +30,7 @@ const loadProduct = async (productId, session) => {
 };
 
 const recordMovement = async (
-  { productId, stream, type, quantity, unitCost = 0, stockAfter, referenceDocument, referenceModel, remarks = '' },
+  { productId, stream, type, quantity, secondaryQuantity = 0, unitCost = 0, stockAfter, referenceDocument, referenceModel, remarks = '' },
   session
 ) => {
   const movement = new StockMovement({
@@ -38,6 +38,8 @@ const recordMovement = async (
     stream,
     type,
     quantity,
+    // Measured secondary movement, same sign as quantity. 0 when unconfigured.
+    secondaryQuantity: Number(secondaryQuantity) || 0,
     unitCost,
     stockAfter,
     referenceDocument,
@@ -56,7 +58,7 @@ const recordMovement = async (
  * used by sales returns so COGS can net the returned cost).
  */
 export const applyStockIn = async (
-  { productId, quantity, unitCostPaise = 0, stream, referenceDocument, referenceModel, remarks = '' },
+  { productId, quantity, secondaryQuantity = 0, unitCostPaise = 0, stream, referenceDocument, referenceModel, remarks = '' },
   session
 ) => {
   const qty = Number(quantity);
@@ -76,7 +78,7 @@ export const applyStockIn = async (
   await product.save({ session });
 
   await recordMovement(
-    { productId, stream, type: 'IN', quantity: qty, unitCost: cost, stockAfter: newQty, referenceDocument, referenceModel, remarks },
+    { productId, stream, type: 'IN', quantity: qty, secondaryQuantity, unitCost: cost, stockAfter: newQty, referenceDocument, referenceModel, remarks },
     session
   );
   return product;
@@ -87,7 +89,7 @@ export const applyStockIn = async (
  * Negative stock is disallowed explicitly — never an accidental side effect.
  */
 export const applyStockOut = async (
-  { productId, quantity, stream, referenceDocument, referenceModel, remarks = '' },
+  { productId, quantity, secondaryQuantity = 0, stream, referenceDocument, referenceModel, remarks = '' },
   session
 ) => {
   const qty = Number(quantity);
@@ -106,8 +108,10 @@ export const applyStockOut = async (
 
   // unitCost records the pool's carrying (average) cost at issue time for
   // COGS reconstruction. The pool WAC itself is unchanged by an OUT movement.
+  // secondaryQuantity mirrors the OUT direction (negative) when measured.
+  const sec = Number(secondaryQuantity) || 0;
   await recordMovement(
-    { productId, stream, type: 'OUT', quantity: -qty, unitCost: product[pool.avg] || 0, stockAfter: newQty, referenceDocument, referenceModel, remarks },
+    { productId, stream, type: 'OUT', quantity: -qty, secondaryQuantity: sec > 0 ? -sec : sec, unitCost: product[pool.avg] || 0, stockAfter: newQty, referenceDocument, referenceModel, remarks },
     session
   );
   return product;

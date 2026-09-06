@@ -56,8 +56,21 @@ export const updateSequenceSettings = createAsyncThunk(
     }
   }
 );
-export const triggerBackup = createAsyncThunk(
-  'settings/triggerBackup',
+export const fetchSequencePreview = createAsyncThunk(
+  'settings/fetchSequencePreview',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/settings/sequences/preview');
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to fetch sequence preview'
+      );
+    }
+  }
+);
+
+export const triggerBackup = createAsyncThunk(  'settings/triggerBackup',
   async (_, { rejectWithValue }) => {
     try {
       const response = await api.post('/settings/backup');
@@ -74,6 +87,8 @@ const settingsSlice = createSlice({
   name: 'settings',
   initialState: {
     data: null,
+    sequencePreview: null,
+    previewLoading: false,
     loading: false,
     error: null,
     updateSuccess: false,
@@ -149,6 +164,18 @@ const settingsSlice = createSlice({
       })
       .addCase(updateSequenceSettings.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+      // Sequence preview (live FY/date/next, never consumes numbers)
+      .addCase(fetchSequencePreview.pending, (state) => {
+        state.previewLoading = true;
+      })
+      .addCase(fetchSequencePreview.fulfilled, (state, action) => {
+        state.previewLoading = false;
+        state.sequencePreview = action.payload;
+      })
+      .addCase(fetchSequencePreview.rejected, (state, action) => {
+        state.previewLoading = false;
         state.error = action.payload;
       })
       // Trigger backup

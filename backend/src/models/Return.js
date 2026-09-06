@@ -11,6 +11,22 @@ const returnItemSchema = new mongoose.Schema({
     required: true,
     min: 1,
   },
+  // Secondary quantity pro-rated from the original line. No fixed
+  // primary↔secondary conversion exists.
+  secondaryQty: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  secondaryUnitName: {
+    type: String,
+    default: '',
+  },
+  pricingBasis: {
+    type: String,
+    enum: ['PRIMARY', 'SECONDARY'],
+    default: 'PRIMARY',
+  },
   rate: {
     type: Number,
     required: true,
@@ -48,7 +64,8 @@ const returnSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    // SR-YYYY-XXXXXX / PR-YYYY-XXXXXX — immutable, never reused.
+    // Production document number (PREFIX-FYMMDD-SEQ, backend-generated,
+    // never reused). Historical numbers are preserved as-is.
   },
   financialYear: { type: Number, default: null, index: true },
   originalModel: {
@@ -88,6 +105,8 @@ const returnSchema = new mongoose.Schema({
     email: { type: String, default: '' },
   },
   returnDate: { type: Date, required: true },
+  // Business date driving FY + MMDD + per-day sequence (business timezone).
+  documentDate: { type: Date, default: null, index: true },
   items: [returnItemSchema],
   subTotal: { type: Number, default: 0, required: true },
   totalCgst: { type: Number, default: 0 },

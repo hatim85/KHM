@@ -11,6 +11,22 @@ const saleItemSchema = new mongoose.Schema({
     required: true,
     min: 1,
   },
+  // Actual measured secondary quantity for this line (0 when the product
+  // has no secondary UOM). No fixed primary↔secondary conversion exists.
+  secondaryQty: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  secondaryUnitName: {
+    type: String,
+    default: '',
+  },
+  pricingBasis: {
+    type: String,
+    enum: ['PRIMARY', 'SECONDARY'],
+    default: 'PRIMARY',
+  },
   rate: {
     type: Number,
     required: true,
@@ -62,6 +78,23 @@ const saleSchema = new mongoose.Schema({
     required: true,
     default: 'ESTIMATE', // Phase 7 focuses on ESTIMATE bills
   },
+  // TAX-stream sub-type (GST law): a TAX sale containing only 0%-GST
+  // (exempt) lines is a Bill of Supply, not a Tax Invoice. Mixed TAX
+  // submissions are split into two documents sharing a splitGroupId.
+  // ESTIMATE docs always carry TAX_INVOICE (field is ignored for them).
+  billType: {
+    type: String,
+    enum: ['TAX_INVOICE', 'BILL_OF_SUPPLY'],
+    default: 'TAX_INVOICE',
+    index: true,
+  },
+  // Links the two documents produced by a mixed GST split (same ObjectId
+  // on both). Null when no split occurred.
+  splitGroupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+    index: true,
+  },
   customer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Customer',
@@ -71,11 +104,14 @@ const saleSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+    // Production document number (PREFIX-FYMMDD-SEQ, backend-generated,
+    // never reused). Historical numbers in older formats are preserved as-is.
   },
   financialYear: {
     type: Number,
     default: null,
     index: true,
+    // Indian FY start year (e.g. 2026 for FY 2026-27).
   },
   sourceEstimateId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -86,6 +122,13 @@ const saleSchema = new mongoose.Schema({
   invoiceDate: {
     type: Date,
     required: true,
+  },
+  // Business date driving FY + MMDD + per-day sequence (business timezone).
+  // Set from invoiceDate at creation; stored separately per numbering policy.
+  documentDate: {
+    type: Date,
+    default: null,
+    index: true,
   },
   items: [saleItemSchema],
   subTotal: {
@@ -111,8 +154,15 @@ const saleSchema = new mongoose.Schema({
     min: 0,
   },
   // Cumulative value credited back via Return documents (paise).
-  // Outstanding = grandTotal - amountPaid - returnedAmount.
+  // Outstanding = grandTotal - amountPaid - returnedAmount - creditNoteAmount.
   returnedAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  // Cumulative value adjusted via Credit Note documents (paise).
+  // Posted by COMPLETED credit notes; reversed on note cancellation.
+  creditNoteAmount: {
     type: Number,
     default: 0,
     min: 0,

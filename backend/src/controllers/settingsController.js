@@ -2,13 +2,14 @@ import CompanySettings from '../models/CompanySettings.js';
 import ApiError from '../utils/ApiError.js';
 import { runDatabaseBackup, getGoogleAuthUrl, exchangeAndStoreTokens } from '../services/backupService.js';
 import { isValidStateCode, normalizeGstin, normalizeStateCode } from '../utils/gstMaster.js';
-import { DOCUMENT_TYPES, previewNextDocumentNumber } from '../utils/documentNumbering.js';
+import { DOCUMENT_TYPES, previewAllSequences } from '../utils/documentNumbering.js';
 import { logAudit } from '../utils/auditLogger.js';
 
-const BUSINESS_FIELDS = ['companyName', 'address', 'gstin', 'stateCode', 'phone', 'email'];
-const SEQUENCE_FIELDS = Object.values(DOCUMENT_TYPES).flatMap((c) => [c.prefixField, c.nextField]);
+const BUSINESS_FIELDS = ['companyName', 'address', 'gstin', 'stateCode', 'phone', 'email', 'timezone'];
+// Only series prefixes are configurable. Per-day sequences (001–999) live in
+// the DocumentCounter collection and are never hand-edited (never reused).
+const SEQUENCE_FIELDS = Object.values(DOCUMENT_TYPES).map((c) => c.prefixField);
 const PREFIX_FIELDS = new Set(Object.values(DOCUMENT_TYPES).map((c) => c.prefixField));
-const NEXT_FIELDS = new Set(Object.values(DOCUMENT_TYPES).map((c) => c.nextField));
 
 const pickFields = (body, allowed) => {
   const out = {};
@@ -26,6 +27,16 @@ const validateBusinessData = (data) => {
   if (data.companyName !== undefined && String(data.companyName).trim() === '') {
     throw new ApiError(400, 'Business name is required.');
   }
+  if (data.timezone !== undefined) {
+    try {
+      new Intl.DateTimeFormat('en-CA', { timeZone: String(data.timezone) });
+    } catch {
+      throw new ApiError(400, 'Timezone is invalid. Use an IANA timezone like Asia/Kolkata.');
+    }
+    if (!/^[A-Za-z_]+\/[A-Za-z_+-]+$/.test(String(data.timezone))) {
+      throw new ApiError(400, 'Timezone is invalid. Use an IANA timezone like Asia/Kolkata.');
+    }
+  }
 };
 
 const validateSequenceData = (data) => {
@@ -34,12 +45,8 @@ const validateSequenceData = (data) => {
       if (!/^[A-Z]{2,5}-$/.test(String(value).trim().toUpperCase())) {
         throw new ApiError(400, `Prefix for ${key} is invalid. Use 2-5 uppercase letters followed by a hyphen (e.g. INV-).`);
       }
-    }
-    if (NEXT_FIELDS.has(key)) {
-      const n = Number(value);
-      if (!Number.isInteger(n) || n < 1) {
-        throw new ApiError(400, `Next number for ${key} must be an integer >= 1.`);
-      }
+    } else {
+      throw new ApiError(400, `Unknown sequence field: ${key}. Only series prefixes are configurable.`);
     }
   }
 };
@@ -94,9 +101,6 @@ const updateSettings = async (req, res, next) => {
     for (const key of PREFIX_FIELDS) {
       if (sequenceUpdate[key] !== undefined) sequenceUpdate[key] = String(sequenceUpdate[key]).trim().toUpperCase();
     }
-    for (const key of NEXT_FIELDS) {
-      if (sequenceUpdate[key] !== undefined) sequenceUpdate[key] = Number(sequenceUpdate[key]);
-    }
     const sanitized = { ...businessUpdate, ...sequenceUpdate };
 
     let settings = await CompanySettings.getSettings();
@@ -105,7 +109,7 @@ const updateSettings = async (req, res, next) => {
     settings = await CompanySettings.findByIdAndUpdate(
       settings._id,
       sanitized,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     auditSettingsChange(req, 'BUSINESS_SETTINGS_UPDATED', `Settings updated (legacy combined endpoint) by ${req.user?.name || req.user?.email || 'Admin'}`, { fields: Object.keys(sanitized) });
@@ -136,7 +140,7 @@ const updateBusinessSettings = async (req, res, next) => {
     const settings = await CompanySettings.getSettings();
     const before = pickFields(settings.toObject(), BUSINESS_FIELDS);
     const updated = await CompanySettings.findByIdAndUpdate(settings._id, updateData, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     });
 
@@ -162,14 +166,11 @@ const updateSequenceSettings = async (req, res, next) => {
     for (const key of PREFIX_FIELDS) {
       if (updateData[key] !== undefined) updateData[key] = String(updateData[key]).trim().toUpperCase();
     }
-    for (const key of NEXT_FIELDS) {
-      if (updateData[key] !== undefined) updateData[key] = Number(updateData[key]);
-    }
 
     const settings = await CompanySettings.getSettings();
     const before = pickFields(settings.toObject(), SEQUENCE_FIELDS);
     const updated = await CompanySettings.findByIdAndUpdate(settings._id, updateData, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true,
     });
 
@@ -181,21 +182,14 @@ const updateSequenceSettings = async (req, res, next) => {
 };
 
 /**
- * @desc    Preview next FY-aware numbers without consuming them
+ * @desc    Preview next production numbers (PREFIX-FYMMDD-SEQ) without consuming them
  * @route   GET /api/settings/sequences/preview
  * @access  Private
  */
 const previewSequences = async (req, res, next) => {
   try {
     const settings = await CompanySettings.getSettings();
-    const preview = {};
-    for (const [key, config] of Object.entries(DOCUMENT_TYPES)) {
-      preview[key] = {
-        prefix: settings[config.prefixField] || config.defaultPrefix,
-        next: settings[config.fyField] === undefined ? 1 : settings[config.nextField] || 1,
-        number: previewNextDocumentNumber(settings, key),
-      };
-    }
+    const preview = await previewAllSequences(settings, new Date());
     res.json({ success: true, data: preview });
   } catch (error) {
     next(error);

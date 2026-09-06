@@ -5,6 +5,20 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+    // Production document number (PREFIX-FYMMDD-SEQ, backend-generated,
+    // never reused). Historical numbers are preserved as-is.
+  },
+  financialYear: {
+    type: Number,
+    default: null,
+    index: true,
+    // Indian FY start year of the voucher date.
+  },
+  documentDate: {
+    type: Date,
+    default: null,
+    index: true,
+    // Business date driving FY + MMDD + per-day sequence.
   },
   date: {
     type: Date,

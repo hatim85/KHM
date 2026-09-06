@@ -5,6 +5,7 @@ import Expense from '../models/Expense.js';
 import Product from '../models/Product.js';
 import StockMovement from '../models/StockMovement.js';
 import Return from '../models/Return.js';
+import Note from '../models/Note.js';
 import CustomerLedger from '../models/CustomerLedger.js';
 import SupplierLedger from '../models/SupplierLedger.js';
 import Payment from '../models/Payment.js';
@@ -46,7 +47,16 @@ export const getProfitAndLoss = async (req, res, next) => {
       { $group: { _id: null, totalReturns: { $sum: '$subTotal' } } }
     ]);
     const salesReturns = salesReturnAgg[0]?.totalReturns || 0;
-    const netSales = Math.max(0, grossSales - salesReturns);
+
+    // Completed Credit Notes reduce recognized sales value (post-invoice
+    // downward adjustments). Cancelled notes are excluded.
+    const noteDateMatch = getDateMatch(startDate, endDate, 'noteDate');
+    const creditAgg = await Note.aggregate([
+      { $match: { ...noteDateMatch, noteType: 'CREDIT_NOTE', status: 'COMPLETED' } },
+      { $group: { _id: null, totalCredit: { $sum: '$subTotal' } } }
+    ]);
+    const creditNotes = creditAgg[0]?.totalCredit || 0;
+    const netSales = Math.max(0, grossSales - salesReturns - creditNotes);
 
     // COGS from the stock movement ledger: TAX OUT issues valued at the
     // carrying average cost recorded at issue time. Cancelled sales excluded.
@@ -82,7 +92,7 @@ export const getProfitAndLoss = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: { netSales, grossSales, salesReturns, cogs, grossProfit, totalExpenses, netProfit }
+      data: { netSales, grossSales, salesReturns, creditNotes, cogs, grossProfit, totalExpenses, netProfit }
     });
   } catch (error) { next(error); }
 };
@@ -95,9 +105,11 @@ export const getGstSummary = async (req, res, next) => {
     const { startDate, endDate } = req.query;
     const dateMatch = getDateMatch(startDate, endDate, 'invoiceDate');
 
-    // Output GST (TAX Sales)
+    // Output GST (Tax Invoices only — Bills of Supply carry no GST and are
+    // reported separately as exempt turnover. `billType: {$ne}` keeps legacy
+    // documents written before billType existed inside the taxable bucket.)
     const salesGst = await Sale.aggregate([
-      { $match: { ...dateMatch, transactionType: 'TAX', status: 'COMPLETED' } },
+      { $match: { ...dateMatch, transactionType: 'TAX', status: 'COMPLETED', billType: { $ne: 'BILL_OF_SUPPLY' } } },
       { $group: {
           _id: null,
           taxableValue: { $sum: '$subTotal' },
@@ -107,6 +119,13 @@ export const getGstSummary = async (req, res, next) => {
       }}
     ]);
     const output = salesGst[0] || { taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+
+    // Exempt turnover via Bills of Supply (0%-GST lines, never taxed).
+    const exemptAgg = await Sale.aggregate([
+      { $match: { ...dateMatch, transactionType: 'TAX', status: 'COMPLETED', billType: 'BILL_OF_SUPPLY' } },
+      { $group: { _id: null, exemptValue: { $sum: '$subTotal' }, count: { $sum: 1 } } }
+    ]);
+    const exempt = exemptAgg[0] || { exemptValue: 0, count: 0 };
 
     // Net sales returns (TAX stream): GST reversal reduces output tax.
     const returnDateMatch = getDateMatch(startDate, endDate, 'returnDate');
@@ -121,12 +140,26 @@ export const getGstSummary = async (req, res, next) => {
       }}
     ]);
     const retOut = salesReturnGst[0] || { taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
+    // Completed Credit Notes (sales-side downward adjustments) reduce output
+    // tax exactly like returns do. Cancelled notes are excluded.
+    const noteDateMatch = getDateMatch(startDate, endDate, 'noteDate');
+    const creditGst = await Note.aggregate([
+      { $match: { ...noteDateMatch, noteType: 'CREDIT_NOTE', status: 'COMPLETED', stream: 'TAX' } },
+      { $group: {
+          _id: null,
+          taxableValue: { $sum: '$subTotal' },
+          cgst: { $sum: '$totalCgst' },
+          sgst: { $sum: '$totalSgst' },
+          igst: { $sum: '$totalIgst' },
+      }}
+    ]);
+    const cnOut = creditGst[0] || { taxableValue: 0, cgst: 0, sgst: 0, igst: 0 };
     // Clamped at zero: range slicing can place a return inside the window
     // while its original sale sits outside it.
-    output.taxableValue = Math.max(0, output.taxableValue - retOut.taxableValue);
-    output.cgst = Math.max(0, output.cgst - retOut.cgst);
-    output.sgst = Math.max(0, output.sgst - retOut.sgst);
-    output.igst = Math.max(0, output.igst - retOut.igst);
+    output.taxableValue = Math.max(0, output.taxableValue - retOut.taxableValue - cnOut.taxableValue);
+    output.cgst = Math.max(0, output.cgst - retOut.cgst - cnOut.cgst);
+    output.sgst = Math.max(0, output.sgst - retOut.sgst - cnOut.sgst);
+    output.igst = Math.max(0, output.igst - retOut.igst - cnOut.igst);
     const totalOutputGst = output.cgst + output.sgst + output.igst;
 
     // Input Tax Credit (TAX Purchases)
@@ -152,6 +185,18 @@ export const getGstSummary = async (req, res, next) => {
     const retIn = purchaseReturnGst[0] || { taxableValue: 0, totalTax: 0 };
     input.taxableValue = Math.max(0, input.taxableValue - retIn.taxableValue);
     input.totalTax = Math.max(0, input.totalTax - retIn.totalTax);
+    // Completed Debit Notes (purchase-side upward adjustments) add ITC.
+    const debitGst = await Note.aggregate([
+      { $match: { ...noteDateMatch, noteType: 'DEBIT_NOTE', status: 'COMPLETED', stream: 'TAX' } },
+      { $group: {
+          _id: null,
+          taxableValue: { $sum: '$subTotal' },
+          totalTax: { $sum: { $add: ['$totalCgst', '$totalSgst', '$totalIgst'] } },
+      }}
+    ]);
+    const dnIn = debitGst[0] || { taxableValue: 0, totalTax: 0 };
+    input.taxableValue = input.taxableValue + dnIn.taxableValue;
+    input.totalTax = input.totalTax + dnIn.totalTax;
     const totalItc = input.totalTax;
 
     const netLiability = totalOutputGst - totalItc;
@@ -160,6 +205,9 @@ export const getGstSummary = async (req, res, next) => {
       success: true,
       data: {
         outputGst: { ...output, total: totalOutputGst },
+        creditNotes: { taxableValue: cnOut.taxableValue, cgst: cnOut.cgst, sgst: cnOut.sgst, igst: cnOut.igst, total: cnOut.cgst + cnOut.sgst + cnOut.igst },
+        debitNotes: { taxableValue: dnIn.taxableValue, total: dnIn.totalTax },
+        exemptSupplies: { exemptValue: exempt.exemptValue || 0, count: exempt.count || 0 },
         inputTaxCredit: { taxableValue: input.taxableValue, total: totalItc },
         netLiability
       }
@@ -281,13 +329,16 @@ export const getTopSellingProducts = async (req, res, next) => {
       { $group: {
           _id: '$items.product',
           totalQuantity: { $sum: '$items.quantity' },
-          totalRevenue: { $sum: { $multiply: ['$items.quantity', '$items.rate'] } }
+          totalSecondaryQuantity: { $sum: { $ifNull: ['$items.secondaryQty', 0] } },
+          secondaryUnit: { $first: '$items.secondaryUnitName' },
+          // Revenue from stored taxable values (correct under any pricing basis).
+          totalRevenue: { $sum: '$items.taxableValue' }
       }},
       { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
       { $unwind: '$product' },
       { $project: {
           _id: 1, name: '$product.name', sku: '$product.sku',
-          totalQuantity: 1, totalRevenue: 1,
+          totalQuantity: 1, totalSecondaryQuantity: 1, secondaryUnit: 1, totalRevenue: 1,
           averageSellingPrice: { $divide: ['$totalRevenue', '$totalQuantity'] }
       }},
       { $sort: { totalRevenue: -1 } },
@@ -311,13 +362,15 @@ export const getTopEstimateProducts = async (req, res, next) => {
       { $group: {
           _id: '$items.product',
           totalQuantity: { $sum: '$items.quantity' },
-          totalRevenue: { $sum: { $multiply: ['$items.quantity', '$items.rate'] } }
+          totalSecondaryQuantity: { $sum: { $ifNull: ['$items.secondaryQty', 0] } },
+          secondaryUnit: { $first: '$items.secondaryUnitName' },
+          totalRevenue: { $sum: '$items.taxableValue' }
       }},
       { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
       { $unwind: '$product' },
       { $project: {
           _id: 1, name: '$product.name', sku: '$product.sku',
-          totalQuantity: 1, totalRevenue: 1,
+          totalQuantity: 1, totalSecondaryQuantity: 1, secondaryUnit: 1, totalRevenue: 1,
           averageSellingPrice: { $divide: ['$totalRevenue', '$totalQuantity'] }
       }},
       { $sort: { totalRevenue: -1 } },
@@ -371,6 +424,7 @@ export const getCustomerSales = async (req, res, next) => {
           _id: '$customer',
           numberOfInvoices: { $sum: 1 },
           totalQuantity: { $sum: { $sum: '$items.quantity' } },
+          totalSecondaryQuantity: { $sum: { $sum: { $map: { input: '$items', as: 'it', in: { $ifNull: ['$$it.secondaryQty', 0] } } } } },
           taxableValue: { $sum: '$subTotal' },
           totalGst: { $sum: { $add: ['$totalCgst', '$totalSgst', '$totalIgst'] } },
           totalSales: { $sum: '$grandTotal' }
@@ -379,7 +433,7 @@ export const getCustomerSales = async (req, res, next) => {
       { $unwind: '$customerObj' },
       { $project: {
           _id: 1, name: '$customerObj.name',
-          numberOfInvoices: 1, totalQuantity: 1,
+          numberOfInvoices: 1, totalQuantity: 1, totalSecondaryQuantity: 1,
           taxableValue: 1, totalGst: 1, totalSales: 1
       }},
       { $sort: { totalSales: -1 } }
@@ -402,13 +456,14 @@ export const getCustomerEstimates = async (req, res, next) => {
           _id: '$customer',
           numberOfEstimates: { $sum: 1 },
           totalQuantity: { $sum: { $sum: '$items.quantity' } },
+          totalSecondaryQuantity: { $sum: { $sum: { $map: { input: '$items', as: 'it', in: { $ifNull: ['$$it.secondaryQty', 0] } } } } },
           totalEstimateValue: { $sum: '$subTotal' }
       }},
       { $lookup: { from: 'customers', localField: '_id', foreignField: '_id', as: 'customerObj' } },
       { $unwind: '$customerObj' },
       { $project: {
           _id: 1, name: '$customerObj.name',
-          numberOfEstimates: 1, totalQuantity: 1,
+          numberOfEstimates: 1, totalQuantity: 1, totalSecondaryQuantity: 1,
           totalEstimateValue: 1
       }},
       { $sort: { totalEstimateValue: -1 } }

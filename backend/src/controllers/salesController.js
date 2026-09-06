@@ -8,9 +8,10 @@ import CompanySettings from '../models/CompanySettings.js';
 import ApiError from '../utils/ApiError.js';
 import { generateInvoicePDF } from '../utils/pdfGenerator.js';
 import { logAudit } from '../utils/auditLogger.js';
-import { getNextDocumentNumber, isPlaceholderNumber } from '../utils/documentNumbering.js';
+import { getNextDocumentNumber } from '../utils/documentNumbering.js';
 import { isIntraStateSupply as checkIntraState } from '../utils/gstMaster.js';
 import { alreadyReturnedQty } from './returnsController.js';
+import { applyGst, resolveDualQty } from '../services/lineItemService.js';
 import { applyStockIn, applyStockOut } from '../services/inventoryService.js';
 import fs from 'fs';
 import path from 'path';
@@ -22,17 +23,166 @@ const __dirname = path.dirname(__filename);
 
 export const getSales = async (req, res, next) => {
   try {
-    const { stream, status, paymentStatus } = req.query;
+    const { stream, status, paymentStatus, billType } = req.query;
     let query = Sale.find().populate('customer', 'name').sort({ createdAt: -1 });
 
     if (stream) query = query.where('transactionType').equals(stream);
     if (status) query = query.where('status').equals(status);
     if (paymentStatus) query = query.where('paymentStatus').equals(paymentStatus);
+    if (billType && ['TAX_INVOICE', 'BILL_OF_SUPPLY'].includes(billType)) {
+      query = query.where('billType').equals(billType);
+    }
 
     const sales = await query;
     res.json({ success: true, count: sales.length, data: sales });
   } catch (error) {
     next(error);
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Bill-of-Supply split helpers (GST law: 0%-GST lines are exempt supplies and
+// must be billed on a Bill of Supply, never on a Tax Invoice).
+// Stock + ledger stay in the TAX stream for both documents; only the numbering
+// series (INV- vs BOS-) and the PDF presentation differ.
+// ---------------------------------------------------------------------------
+
+/** Allocate a backend-generated production number (PREFIX-FYMMDD-SEQ).
+ * Client-supplied numbers are never honoured — numbering is backend-only. */
+const allocateSaleNumber = async ({ docType, invoiceDate }) => {
+  const generated = await getNextDocumentNumber(docType, invoiceDate ? new Date(invoiceDate) : new Date());
+  return { invoiceNumber: generated.number, financialYear: generated.fy, documentDate: generated.documentDate };
+};
+
+/** Build processed line items + totals for one partition of request lines. */
+const buildPartitionTotals = async ({ lines, transactionType, isIntraState, session }) => {
+  let subTotal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
+  const processedItems = [];
+  for (const item of lines) {
+    const product = await Product.findById(item.product).populate('unit', 'shortName').populate('secondaryUnit', 'shortName').session(session);
+    if (!product) throw new ApiError(404, `Product not found: ${item.product}`);
+
+    const { qty, sec, secName, basis } = resolveDualQty({
+      product, quantity: item.quantity, secondaryQty: item.secondaryQty,
+    });
+    const billBase = (basis === 'SECONDARY' ? sec : qty) * item.rate;
+    const gstRate = product.gstRate || 0;
+    const { taxableValue, cgst, sgst, igst, total: itemTotal } = applyGst({
+      billBase, gstRate, isTax: transactionType === 'TAX', intra: isIntraState,
+    });
+
+    subTotal += taxableValue;
+    totalCgst += cgst;
+    totalSgst += sgst;
+    totalIgst += igst;
+
+    processedItems.push({
+      product: item.product,
+      quantity: qty,
+      rate: item.rate,
+      secondaryQty: sec,
+      secondaryUnitName: secName,
+      pricingBasis: basis,
+      specification: String(product.specification || '').trim().slice(0, 500),
+      taxableValue,
+      gstRate,
+      cgst,
+      sgst,
+      igst,
+      total: itemTotal,
+      productName: product.name || '',
+      sku: product.sku || '',
+      hsnCode: product.hsnCode || '',
+      unitName: product.unit?.shortName || '',
+    });
+  }
+  return { processedItems, subTotal, totalCgst, totalSgst, totalIgst };
+};
+
+const createSaleDocument = async ({
+  session, transactionType, billType, splitGroupId,
+  customerId, custDoc, settings, invoiceNumber, financialYear, documentDate,
+  invoiceDate, processedItems, subTotal, totalCgst, totalSgst, totalIgst,
+  discount, status, remarks, dispatchThrough, idempotencyKey,
+}) => {
+  const grandTotal = subTotal + totalCgst + totalSgst + totalIgst - discount;
+  const sale = new Sale({
+    transactionType,
+    billType,
+    ...(splitGroupId ? { splitGroupId } : {}),
+    customer: customerId,
+    invoiceNumber,
+    financialYear,
+    documentDate: documentDate || (invoiceDate ? new Date(invoiceDate) : new Date()),
+    invoiceDate,
+    items: processedItems,
+    subTotal,
+    totalCgst,
+    totalSgst,
+    totalIgst,
+    discount,
+    grandTotal,
+    status,
+    remarks,
+    dispatchThrough: String(dispatchThrough || '').trim(),
+    customerSnapshot: {
+      name: custDoc.name || '',
+      gstin: custDoc.gstin || '',
+      address: custDoc.address || '',
+      phone: custDoc.phone || '',
+      stateCode: custDoc.stateCode || '',
+    },
+    companySnapshot: settings ? {
+      companyName: settings.companyName || '',
+      address: settings.address || '',
+      gstin: settings.gstin || '',
+      stateCode: settings.stateCode || '',
+      phone: settings.phone || '',
+      email: settings.email || '',
+    } : undefined,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
+  });
+  await sale.save({ session });
+
+  if (status === 'COMPLETED') {
+    for (const item of processedItems) {
+      await applyStockOut({
+        productId: item.product,
+        quantity: item.quantity,
+        secondaryQuantity: item.secondaryQty || 0,
+        stream: transactionType,
+        referenceDocument: sale._id,
+        referenceModel: 'Sale',
+      }, session);
+    }
+
+    const lastLedger = await CustomerLedger.findOne({ customer: customerId, stream: transactionType })
+      .sort({ createdAt: -1 })
+      .session(session);
+    const previousBalance = lastLedger ? lastLedger.balanceAfter : 0;
+    await new CustomerLedger({
+      customer: customerId,
+      stream: transactionType,
+      transactionType: 'SALE',
+      referenceDocument: sale._id,
+      referenceModel: 'Sale',
+      debit: grandTotal,
+      balanceAfter: previousBalance + grandTotal,
+    }).save({ session });
+  }
+  return sale;
+};
+
+const generateSalePdf = async (sale) => {
+  try {
+    await sale.populate('customer', 'name address gstin phone stateCode');
+    await sale.populate({ path: 'items.product', select: 'name sku hsnCode unit secondaryUnit', populate: [{ path: 'unit', select: 'shortName' }, { path: 'secondaryUnit', select: 'shortName' }] });
+    const settings = await CompanySettings.findOne();
+    const pdfMeta = await generateInvoicePDF(sale, settings);
+    await Sale.findByIdAndUpdate(sale._id, { pdf: pdfMeta });
+    sale.pdf = pdfMeta;
+  } catch (pdfError) {
+    console.error('PDF Generation failed:', pdfError);
   }
 };
 
@@ -44,7 +194,8 @@ export const createSale = async (req, res, next) => {
 
   try {
     const { transactionType, customer, invoiceDate, items, status, discount, remarks, dispatchThrough } = req.body;
-    let { invoiceNumber } = req.body;
+    // NOTE: client-supplied invoice numbers are ignored — document numbers
+    // are generated ONLY on the backend (PREFIX-FYMMDD-SEQ).
 
     if (!transactionType || !['TAX', 'ESTIMATE'].includes(transactionType)) {
       throw new ApiError(400, 'A valid transactionType (TAX or ESTIMATE) is required.');
@@ -67,14 +218,24 @@ export const createSale = async (req, res, next) => {
     }
 
     // Duplicate-submission guard: replaying an Idempotency-Key returns the
-    // original document instead of creating a second sale.
+    // original document(s) instead of creating a second sale. Split bills
+    // share a splitGroupId, so a replay returns the whole split family.
     idempotencyKey = req.headers['idempotency-key'] || req.body.idempotencyKey || undefined;
     if (idempotencyKey) {
       const replayed = await Sale.findOne({ idempotencyKey }).session(session);
       if (replayed) {
+        let splitBills = [replayed];
+        let splitOccurred = false;
+        if (replayed.splitGroupId) {
+          splitBills = await Sale.find({ splitGroupId: replayed.splitGroupId }).session(session);
+          // Tax invoice first for a stable response shape.
+          splitBills.sort((a, b) => (a.billType === b.billType ? 0 : a.billType === 'TAX_INVOICE' ? -1 : 1));
+          splitOccurred = splitBills.length > 1;
+        }
+        const primary = splitBills.find((s) => s.billType === 'TAX_INVOICE') || splitBills[0];
         await session.abortTransaction();
         session.endSession();
-        return res.status(200).json({ success: true, data: replayed, deduplicated: true });
+        return res.status(200).json({ success: true, data: primary, splitBills, splitOccurred, deduplicated: true });
       }
     }
 
@@ -91,6 +252,7 @@ export const createSale = async (req, res, next) => {
     // Pre-validate pool stock BEFORE consuming a document number so a
     // failed sale never burns a number (gaps are still safe, just avoided).
     // Pools are separate: TAX sales draw taxStock, ESTIMATE sales draw estimateStock.
+    // Bills of Supply draw the TAX pool — exemption changes paperwork, not physics.
     if (status === 'COMPLETED') {
       const poolField = transactionType === 'TAX' ? 'taxStock' : 'estimateStock';
       for (const item of items) {
@@ -102,194 +264,143 @@ export const createSale = async (req, res, next) => {
       }
     }
 
-    // Backend-authoritative FY-aware numbering. Frontend must NOT be trusted
-    // for document numbers: placeholders / missing values are generated atomically.
-    const docType = transactionType === 'TAX' ? 'TAX' : 'ESTIMATE';
-    let financialYear = null;
-    if (isPlaceholderNumber(invoiceNumber)) {
-      const generated = await getNextDocumentNumber(docType, invoiceDate ? new Date(invoiceDate) : new Date());
-      invoiceNumber = generated.number;
-      financialYear = generated.fy;
+    // GST split classification (TAX sales only, decided on the product
+    // master's gstRate — never client-supplied). 0% lines are exempt and
+    // belong on a Bill of Supply; >0% lines stay on the Tax Invoice.
+    // ESTIMATE sales never split.
+    let exemptLines = [];
+    let taxableLines = [];
+    if (transactionType === 'TAX') {
+      const rateCache = new Map();
+      for (const item of items) {
+        let gstRate = rateCache.get(String(item.product));
+        if (gstRate === undefined) {
+          const product = await Product.findById(item.product).select('gstRate').session(session);
+          if (!product) throw new ApiError(404, `Product not found: ${item.product}`);
+          gstRate = Number(product.gstRate) || 0;
+          rateCache.set(String(item.product), gstRate);
+        }
+        if (gstRate === 0) exemptLines.push(item);
+        else taxableLines.push(item);
+      }
     } else {
-      invoiceNumber = String(invoiceNumber).trim();
-      const existing = await Sale.findOne({ invoiceNumber }).session(session);
-      if (existing) throw new ApiError(400, 'Invoice number already exists');
-      const fyMatch = String(invoiceNumber).match(/^[A-Z]{2,5}-(\d{4})-\d{6}$/);
-      financialYear = fyMatch ? Number(fyMatch[1]) : null;
+      taxableLines = items;
     }
+    const isSplit = exemptLines.length > 0 && taxableLines.length > 0;
+    const isBillOfSupplyOnly = transactionType === 'TAX' && exemptLines.length > 0 && taxableLines.length === 0;
+
+    // Backend-authoritative numbering (PREFIX-FYMMDD-SEQ, per-day series).
+    // Numbers are generated ONLY here — never from client input.
+    const splitGroupId = isSplit ? new mongoose.Types.ObjectId() : null;
 
     // Intra/inter-state is decided purely on 2-digit GST state codes.
     const isIntraState = checkIntraState(companyStateCode, customerStateCode);
+    const parsedDiscount = Number(discount) || 0;
 
-    let subTotal = 0; // Sum of taxable values
-    let totalCgst = 0;
-    let totalSgst = 0;
-    let totalIgst = 0;
-    
-    const processedItems = [];
-
-    for (const item of items) {
-      const product = await Product.findById(item.product).populate('unit', 'shortName').session(session);
-      if (!product) throw new ApiError(404, `Product not found: ${item.product}`);
-
-      const qty = Number(item.quantity);
-
-      // GST Calculation
-      const taxableValue = qty * item.rate; // Rate is exclusive of GST
-      let cgst = 0, sgst = 0, igst = 0;
-
-      const gstRate = product.gstRate || 0;
-      const taxAmount = Math.round(taxableValue * (gstRate / 100));
-
-      if (transactionType === 'TAX') {
-        if (isIntraState) {
-          cgst = Math.round(taxAmount / 2);
-          sgst = taxAmount - cgst; // Ensure no rounding errors
-        } else {
-          igst = taxAmount;
-        }
-      }
-
-      const itemTotal = taxableValue + cgst + sgst + igst;
-
-      subTotal += taxableValue;
-      totalCgst += cgst;
-      totalSgst += sgst;
-      totalIgst += igst;
-
-      processedItems.push({
-        product: item.product,
-        quantity: qty,
-        rate: item.rate,
-        // Snapshot from the product master — never client-supplied.
-        specification: String(product.specification || '').trim().slice(0, 500),
-        taxableValue,
-        gstRate,
-        cgst,
-        sgst,
-        igst,
-        total: itemTotal,
-        // Snapshot at finalization — history never reads live masters.
-        productName: product.name || '',
-        sku: product.sku || '',
-        hsnCode: product.hsnCode || '',
-        unitName: product.unit?.shortName || '',
-      });
+    // Build one partition per document: [taxable?, exempt?] — single-doc
+    // sales keep the legacy shape (one partition, no splitGroupId).
+    const partitions = [];
+    if (isSplit) {
+      partitions.push({ lines: taxableLines, billType: 'TAX_INVOICE', docType: 'TAX', idemKey: idempotencyKey });
+      partitions.push({ lines: exemptLines, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY', idemKey: idempotencyKey ? `${idempotencyKey}:BOS` : undefined });
+    } else if (isBillOfSupplyOnly) {
+      partitions.push({ lines: exemptLines, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY', idemKey: idempotencyKey });
+    } else {
+      const fallbackDocType = transactionType === 'TAX' ? 'TAX' : 'ESTIMATE';
+      partitions.push({ lines: taxableLines.length ? taxableLines : items, billType: 'TAX_INVOICE', docType: fallbackDocType, idemKey: idempotencyKey });
     }
 
-    const parsedDiscount = Number(discount) || 0;
-    const grandTotal = subTotal + totalCgst + totalSgst + totalIgst - parsedDiscount;
-
-    // Create Sale Document (numbers are immutable after finalization)
-    const sale = new Sale({
-      transactionType,
-      customer,
-      invoiceNumber,
-      financialYear,
-      invoiceDate,
-      items: processedItems,
-      subTotal,
-      totalCgst,
-      totalSgst,
-      totalIgst,
-      discount: parsedDiscount,
-      grandTotal,
-      status,
-      remarks,
-      dispatchThrough: String(dispatchThrough || '').trim(),
-      customerSnapshot: {
-        name: custDoc.name || '',
-        gstin: custDoc.gstin || '',
-        address: custDoc.address || '',
-        phone: custDoc.phone || '',
-        stateCode: custDoc.stateCode || '',
-      },
-      companySnapshot: settings ? {
-        companyName: settings.companyName || '',
-        address: settings.address || '',
-        gstin: settings.gstin || '',
-        stateCode: settings.stateCode || '',
-        phone: settings.phone || '',
-        email: settings.email || '',
-      } : undefined,
-      ...(idempotencyKey ? { idempotencyKey } : {}),
+    // Totals first (discount is pro-rated across partitions by taxable value
+    // so the two bills sum exactly to the submitted discount).
+    const built = [];
+    for (const p of partitions) {
+      const totals = await buildPartitionTotals({ lines: p.lines, transactionType, isIntraState, session });
+      built.push({ ...p, ...totals });
+    }
+    const combinedSub = built.reduce((s, b) => s + b.subTotal, 0);
+    let discountLeft = parsedDiscount;
+    built.forEach((b, i) => {
+      if (built.length === 1) {
+        b.discount = parsedDiscount;
+      } else if (i < built.length - 1) {
+        b.discount = combinedSub > 0 ? Math.round((parsedDiscount * b.subTotal) / combinedSub) : 0;
+        discountLeft -= b.discount;
+      } else {
+        b.discount = discountLeft;
+      }
     });
 
-    await sale.save({ session });
+    // Numbers are immutable after finalization — allocate before persisting.
+    for (const b of built) {
+      const allocated = await allocateSaleNumber({ docType: b.docType, invoiceDate });
+      b.invoiceNumber = allocated.invoiceNumber;
+      b.financialYear = allocated.financialYear;
+      b.documentDate = allocated.documentDate;
+    }
 
-    // If COMPLETED, process stock reduction, ledger, and PDF
-    if (status === 'COMPLETED') {
-      for (const item of processedItems) {
-        // Single physical stock OUT (TAX and ESTIMATE both reduce it).
-        // Stream is recorded on the movement for classification only.
-        await applyStockOut({
-          productId: item.product,
-          quantity: item.quantity,
-          stream: transactionType,
-          referenceDocument: sale._id,
-          referenceModel: 'Sale',
-        }, session);
-      }
-
-      // 3. Update Customer Ledger
-      const lastLedger = await CustomerLedger.findOne({ customer, stream: transactionType })
-        .sort({ createdAt: -1 })
-        .session(session);
-      
-      const previousBalance = lastLedger ? lastLedger.balanceAfter : 0;
-      const newBalance = previousBalance + grandTotal; // Increase debt
-
-      const ledgerEntry = new CustomerLedger({
-        customer,
-        stream: transactionType,
-        transactionType: 'SALE',
-        referenceDocument: sale._id,
-        referenceModel: 'Sale',
-        debit: grandTotal,
-        balanceAfter: newBalance
+    const created = [];
+    for (const b of built) {
+      const sale = await createSaleDocument({
+        session, transactionType, billType: b.billType,
+        splitGroupId, customerId: customer, custDoc, settings,
+        invoiceNumber: b.invoiceNumber, financialYear: b.financialYear, documentDate: b.documentDate,
+        invoiceDate, processedItems: b.processedItems,
+        subTotal: b.subTotal, totalCgst: b.totalCgst, totalSgst: b.totalSgst, totalIgst: b.totalIgst,
+        discount: b.discount, status, remarks, dispatchThrough,
+        idempotencyKey: b.idemKey,
       });
-      await ledgerEntry.save({ session });
+      created.push(sale);
     }
 
     await session.commitTransaction();
     session.endSession();
 
-    // Generate PDF asynchronously
+    // Generate PDFs (outside the transaction — storage I/O must never hold it).
     if (status === 'COMPLETED') {
-      try {
-        await sale.populate('customer', 'name address gstin phone stateCode');
-        await sale.populate({ path: 'items.product', select: 'name sku hsnCode unit', populate: { path: 'unit', select: 'shortName' } });
-        
-        const settings = await CompanySettings.findOne();
-        const pdfMeta = await generateInvoicePDF(sale, settings);
-        
-        await Sale.findByIdAndUpdate(sale._id, { pdf: pdfMeta });
-        sale.pdf = pdfMeta;
-      } catch (pdfError) {
-        console.error("PDF Generation failed:", pdfError);
+      for (const sale of created) {
+        await generateSalePdf(sale);
       }
     }
 
-    // Audit Log
-    logAudit({
-      action: `SALE_CREATED`,
-      entity: 'Sale',
-      entityId: sale._id,
-      userId: req.user._id,
-      summary: `Created ${transactionType} ${invoiceNumber} for ${custDoc.name} — ${(grandTotal / 100).toFixed(2)}`,
-      metadata: { transactionType, invoiceNumber, grandTotal, customer: custDoc.name },
-      ipAddress: req.ip
-    });
+    // Audit Log (one entry per document so each number is traceable).
+    for (const sale of created) {
+      logAudit({
+        action: 'SALE_CREATED',
+        entity: 'Sale',
+        entityId: sale._id,
+        userId: req.user._id,
+        summary: `Created ${sale.billType === 'BILL_OF_SUPPLY' ? 'Bill of Supply' : transactionType} ${sale.invoiceNumber} for ${custDoc.name} — ${(sale.grandTotal / 100).toFixed(2)}`,
+        metadata: { transactionType, billType: sale.billType, invoiceNumber: sale.invoiceNumber, grandTotal: sale.grandTotal, customer: custDoc.name, ...(splitGroupId ? { splitGroupId: String(splitGroupId) } : {}) },
+        ipAddress: req.ip
+      });
+    }
 
-    res.status(201).json({ success: true, data: sale });
+    const primary = created.find((s) => s.billType === 'TAX_INVOICE') || created[0];
+    if (created.length > 1) {
+      // Tax invoice first for a stable contract.
+      created.sort((a, b) => (a.billType === b.billType ? 0 : a.billType === 'TAX_INVOICE' ? -1 : 1));
+      return res.status(201).json({ success: true, data: primary, splitBills: created, splitOccurred: true });
+    }
+    return res.status(201).json({ success: true, data: primary, splitBills: created, splitOccurred: false });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
     if (error.code === 11000) {
-      // Idempotency-Key race: another request won — return the original.
+      // Idempotency-Key race: another request won — return the original family.
       if (idempotencyKey) {
         const replayed = await Sale.findOne({ idempotencyKey });
-        if (replayed) return res.status(200).json({ success: true, data: replayed, deduplicated: true });
+        if (replayed) {
+          let splitBills = [replayed];
+          if (replayed.splitGroupId) {
+            splitBills = await Sale.find({ splitGroupId: replayed.splitGroupId });
+            splitBills.sort((a, b) => (a.billType === b.billType ? 0 : a.billType === 'TAX_INVOICE' ? -1 : 1));
+          }
+          const primary = splitBills.find((s) => s.billType === 'TAX_INVOICE') || splitBills[0];
+          if (splitBills.length > 1) return res.status(200).json({ success: true, data: primary, splitBills, splitOccurred: true, deduplicated: true });
+          return res.status(200).json({ success: true, data: replayed, deduplicated: true });
+        }
+        const bosReplay = await Sale.findOne({ idempotencyKey: `${idempotencyKey}:BOS` });
+        if (bosReplay) return res.status(200).json({ success: true, data: bosReplay, deduplicated: true });
       }
       return next(new ApiError(400, 'Invoice number already exists'));
     }
@@ -332,7 +443,6 @@ export const convertEstimateToTax = async (req, res, next) => {
     if (!custDoc) throw new ApiError(404, 'Customer not found');
     const isIntraState = checkIntraState(companyStateCode, custDoc.stateCode || '24');
 
-    let subTotal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
     const processedItems = [];
     for (const line of estimate.items) {
       // Return-aware conversion: only the not-yet-returned quantity is billed.
@@ -342,31 +452,30 @@ export const convertEstimateToTax = async (req, res, next) => {
       const product = await Product.findById(line.product).populate('unit', 'shortName').session(session);
       if (!product) throw new ApiError(404, `Product not found: ${line.product}`);
       const rate = Number(line.rate);
-      const taxableValue = qty * rate;
+      // Carry the estimate line's dual quantities, pro-rated to the remainder.
+      const ratio = qty / Number(line.quantity);
+      const sec = Number(line.secondaryQty) || 0;
+      const billSec = sec > 0 ? Math.round(sec * ratio * 1000) / 1000 : 0;
+      const basis = line.pricingBasis === 'SECONDARY' ? 'SECONDARY' : 'PRIMARY';
+      const billBase = (basis === 'SECONDARY' ? billSec : qty) * rate; // Rate is exclusive of GST
       const gstRate = product.gstRate || 0;
-      const taxAmount = Math.round(taxableValue * (gstRate / 100));
-      let cgst = 0, sgst = 0, igst = 0;
-      if (isIntraState) {
-        cgst = Math.round(taxAmount / 2);
-        sgst = taxAmount - cgst;
-      } else {
-        igst = taxAmount;
-      }
-      subTotal += taxableValue;
-      totalCgst += cgst;
-      totalSgst += sgst;
-      totalIgst += igst;
+      const { taxableValue, cgst, sgst, igst, total: lineTotal } = applyGst({
+        billBase, gstRate, isTax: true, intra: isIntraState,
+      });
       processedItems.push({
         product: line.product,
         quantity: qty,
         rate,
+        secondaryQty: billSec,
+        secondaryUnitName: line.secondaryUnitName || '',
+        pricingBasis: basis,
         specification: String(line.specification || '').trim().slice(0, 500),
         taxableValue,
         gstRate,
         cgst,
         sgst,
         igst,
-        total: taxableValue + cgst + sgst + igst,
+        total: lineTotal,
         productName: product.name || '',
         sku: product.sku || '',
         hsnCode: product.hsnCode || '',
@@ -378,23 +487,58 @@ export const convertEstimateToTax = async (req, res, next) => {
       throw new ApiError(400, 'Nothing left to convert — all estimate lines were fully returned.');
     }
 
-    const grandTotal = subTotal + totalCgst + totalSgst + totalIgst - (Number(estimate.discount) || 0);
-    const generated = await getNextDocumentNumber('TAX', new Date());
+    const estimateDiscount = Number(estimate.discount) || 0;
+    const taxablePart = processedItems.filter((l) => Number(l.gstRate) > 0);
+    const exemptPart = processedItems.filter((l) => !(Number(l.gstRate) > 0));
+    const convSplit = taxablePart.length > 0 && exemptPart.length > 0;
+    const convGroupId = convSplit ? new mongoose.Types.ObjectId() : null;
 
-    const invoice = new Sale({
-      transactionType: 'TAX',
-      customer: estimate.customer,
-      invoiceNumber: generated.number,
-      financialYear: generated.fy,
-      sourceEstimateId: estimate._id,
-      invoiceDate: new Date(),
-      items: processedItems,
-      subTotal,
-      totalCgst,
-      totalSgst,
-      totalIgst,
-      discount: Number(estimate.discount) || 0,
-      grandTotal,
+    const subPart = (lines) => lines.reduce((s, l) => s + l.taxableValue, 0);
+    const convParts = [];
+    if (convSplit) {
+      convParts.push({ lines: taxablePart, billType: 'TAX_INVOICE', docType: 'TAX' });
+      convParts.push({ lines: exemptPart, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY' });
+    } else if (exemptPart.length > 0) {
+      convParts.push({ lines: exemptPart, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY' });
+    } else {
+      convParts.push({ lines: taxablePart, billType: 'TAX_INVOICE', docType: 'TAX' });
+    }
+    // Pro-rate the estimate discount across the split pair by taxable value.
+    const convSubTotal = convParts.reduce((s, p) => s + subPart(p.lines), 0);
+    let convDiscountLeft = estimateDiscount;
+    convParts.forEach((p, i) => {
+      const st = subPart(p.lines);
+      const cg = p.lines.reduce((s, l) => s + l.cgst, 0);
+      const sg = p.lines.reduce((s, l) => s + l.sgst, 0);
+      const ig = p.lines.reduce((s, l) => s + l.igst, 0);
+      p.subTotal = st; p.totalCgst = cg; p.totalSgst = sg; p.totalIgst = ig;
+      if (convParts.length === 1) p.discount = estimateDiscount;
+      else if (i < convParts.length - 1) {
+        p.discount = convSubTotal > 0 ? Math.round((estimateDiscount * st) / convSubTotal) : 0;
+        convDiscountLeft -= p.discount;
+      } else p.discount = convDiscountLeft;
+      p.grandTotal = st + cg + sg + ig - p.discount;
+    });
+
+    const converted = [];
+    for (const p of convParts) {
+      const generated = await getNextDocumentNumber(p.docType, new Date());
+      const invoice = new Sale({
+        transactionType: 'TAX',
+        billType: p.billType,
+        ...(convGroupId ? { splitGroupId: convGroupId } : {}),
+        customer: estimate.customer,
+        invoiceNumber: generated.number,
+        financialYear: generated.fy,
+        sourceEstimateId: estimate._id,
+        invoiceDate: new Date(),
+        items: p.lines,
+        subTotal: p.subTotal,
+        totalCgst: p.totalCgst,
+        totalSgst: p.totalSgst,
+        totalIgst: p.totalIgst,
+        discount: p.discount,
+        grandTotal: p.grandTotal,
       status: 'COMPLETED',
       remarks: `Converted from estimate ${estimate.invoiceNumber}`,
       dispatchThrough: estimate.dispatchThrough || '',
@@ -415,53 +559,57 @@ export const convertEstimateToTax = async (req, res, next) => {
       } : undefined,
     });
     await invoice.save({ session });
+      converted.push(invoice);
 
-    // TAX-stream ledger debit for the new legal receivable.
-    // Deliberately NO stock movement: goods already issued via the estimate.
-    const lastLedger = await CustomerLedger.findOne({ customer: estimate.customer, stream: 'TAX' })
-      .sort({ createdAt: -1 })
-      .session(session);
-    const previousBalance = lastLedger ? lastLedger.balanceAfter : 0;
-    await new CustomerLedger({
-      customer: estimate.customer,
-      stream: 'TAX',
-      transactionType: 'SALE',
-      referenceDocument: invoice._id,
-      referenceModel: 'Sale',
-      debit: grandTotal,
-      balanceAfter: previousBalance + grandTotal,
-    }).save({ session });
+      // TAX-stream ledger debit for the new legal receivable.
+      // Deliberately NO stock movement: goods already issued via the estimate.
+      const lastLedger = await CustomerLedger.findOne({ customer: estimate.customer, stream: 'TAX' })
+        .sort({ createdAt: -1 })
+        .session(session);
+      const previousBalance = lastLedger ? lastLedger.balanceAfter : 0;
+      await new CustomerLedger({
+        customer: estimate.customer,
+        stream: 'TAX',
+        transactionType: 'SALE',
+        referenceDocument: invoice._id,
+        referenceModel: 'Sale',
+        debit: p.grandTotal,
+        balanceAfter: previousBalance + p.grandTotal,
+      }).save({ session });
+    }
 
     await session.commitTransaction();
     session.endSession();
 
-    try {
-      await invoice.populate('customer', 'name address gstin phone stateCode');
-      await invoice.populate({ path: 'items.product', select: 'name sku hsnCode unit', populate: { path: 'unit', select: 'shortName' } });
-      const companySettings = await CompanySettings.findOne();
-      const pdfMeta = await generateInvoicePDF(invoice, companySettings);
-      await Sale.findByIdAndUpdate(invoice._id, { pdf: pdfMeta });
-      invoice.pdf = pdfMeta;
-    } catch (pdfError) {
-      console.error('PDF Generation failed:', pdfError);
+    for (const invoice of converted) {
+      await generateSalePdf(invoice);
     }
 
-    logAudit({
-      action: 'ESTIMATE_CONVERTED',
-      entity: 'Sale',
-      entityId: invoice._id,
-      userId: req.user._id,
-      summary: `Converted estimate ${estimate.invoiceNumber} to tax invoice ${invoice.invoiceNumber}`,
-      metadata: {
-        estimateId: estimate._id,
-        estimateNumber: estimate.invoiceNumber,
-        invoiceId: invoice._id,
-        invoiceNumber: invoice.invoiceNumber,
-      },
-      ipAddress: req.ip,
-    });
+    for (const invoice of converted) {
+      logAudit({
+        action: 'ESTIMATE_CONVERTED',
+        entity: 'Sale',
+        entityId: invoice._id,
+        userId: req.user._id,
+        summary: `Converted estimate ${estimate.invoiceNumber} to ${invoice.billType === 'BILL_OF_SUPPLY' ? 'bill of supply' : 'tax invoice'} ${invoice.invoiceNumber}`,
+        metadata: {
+          estimateId: estimate._id,
+          estimateNumber: estimate.invoiceNumber,
+          invoiceId: invoice._id,
+          invoiceNumber: invoice.invoiceNumber,
+          billType: invoice.billType,
+          ...(convGroupId ? { splitGroupId: String(convGroupId) } : {}),
+        },
+        ipAddress: req.ip,
+      });
+    }
 
-    res.status(201).json({ success: true, data: invoice });
+    converted.sort((a, b) => (a.billType === b.billType ? 0 : a.billType === 'TAX_INVOICE' ? -1 : 1));
+    const primaryConverted = converted.find((s) => s.billType === 'TAX_INVOICE') || converted[0];
+    if (converted.length > 1) {
+      return res.status(201).json({ success: true, data: primaryConverted, splitBills: converted, splitOccurred: true });
+    }
+    return res.status(201).json({ success: true, data: primaryConverted, splitBills: converted, splitOccurred: false });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -515,6 +663,7 @@ export const cancelSale = async (req, res, next) => {
           await applyStockIn({
             productId: item.product,
             quantity: item.quantity,
+            secondaryQuantity: item.secondaryQty || 0,
             unitCostPaise: 0, // reversal restores quantity; WAC unchanged
             stream: sale.transactionType,
             referenceDocument: sale._id,
@@ -562,8 +711,8 @@ export const cancelSale = async (req, res, next) => {
   }
 };
 
-// Helper function for serving PDFs
-const streamPdfToResponse = async (sale, res, contentDisposition) => {
+// Helper function for serving PDFs (shared with the notes controller).
+export const streamPdfToResponse = async (sale, res, contentDisposition) => {
   if (!sale) throw new ApiError(404, 'Sale not found');
   
   if (!sale.pdf || !sale.pdf.objectKey) {

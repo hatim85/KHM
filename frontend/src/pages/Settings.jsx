@@ -1,34 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchSettings, updateBusinessSettings, updateSequenceSettings, clearSettingsError, resetUpdateSuccess, triggerBackup, clearBackupResult } from '../features/settingsSlice';
+import { fetchSettings, fetchSequencePreview, updateBusinessSettings, updateSequenceSettings, clearSettingsError, resetUpdateSuccess, triggerBackup, clearBackupResult } from '../features/settingsSlice';
 import { GST_STATES } from '../utils/gstStates';
 import { AlertTriangleIcon, CheckIcon, CloudUploadIcon, XIcon } from '../components/icons';
 
-const getFinancialYearStart = (date = new Date()) => {
-  const d = new Date(date);
-  return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
-};
-
+// Backend document-type keys (PREFIX-FYMMDD-SEQ, per-day 001–999 series).
 const SEQUENCE_ROWS = [
-  { label: 'Tax Invoice', prefix: 'taxInvoicePrefix', next: 'taxInvoiceNextNumber', fy: 'taxInvoiceFY' },
-  { label: 'Estimate', prefix: 'estimatePrefix', next: 'estimateNextNumber', fy: 'estimateFY' },
-  { label: 'Sales Return', prefix: 'salesReturnPrefix', next: 'salesReturnNextNumber', fy: 'salesReturnFY' },
-  { label: 'Purchase Return', prefix: 'purchaseReturnPrefix', next: 'purchaseReturnNextNumber', fy: 'purchaseReturnFY' },
-  { label: 'Receipt Voucher', prefix: 'receiptPrefix', next: 'receiptNextNumber', fy: 'receiptFY' },
-  { label: 'Payment Voucher', prefix: 'paymentPrefix', next: 'paymentNextNumber', fy: 'paymentFY' },
+  { key: 'TAX', label: 'Tax Invoice', prefix: 'taxInvoicePrefix' },
+  { key: 'SUPPLY', label: 'Bill of Supply (0% GST)', prefix: 'supplyPrefix' },
+  { key: 'ESTIMATE', label: 'Estimate', prefix: 'estimatePrefix' },
+  { key: 'SALES_RETURN', label: 'Sales Return', prefix: 'salesReturnPrefix' },
+  { key: 'PURCHASE_RETURN', label: 'Purchase Return', prefix: 'purchaseReturnPrefix' },
+  { key: 'CREDIT_NOTE', label: 'Credit Note', prefix: 'creditNotePrefix' },
+  { key: 'DEBIT_NOTE', label: 'Debit Note', prefix: 'debitNotePrefix' },
+  { key: 'RECEIPT', label: 'Receipt Voucher', prefix: 'receiptPrefix' },
+  { key: 'PAYMENT', label: 'Payment Voucher', prefix: 'paymentPrefix' },
 ];
 
-const fyPreview = (settings, row) => {
-  const fy = getFinancialYearStart();
-  const prefix = settings?.[row.prefix] || '';
-  const storedFy = settings?.[row.fy];
-  const next = storedFy === fy ? settings?.[row.next] || 1 : 1;
-  return { fy, next, number: `${prefix}${fy}-${String(next).padStart(6, '0')}` };
-};
+const TIMEZONE_OPTIONS = [
+  'Asia/Kolkata', 'UTC', 'Asia/Dubai', 'Asia/Singapore', 'Asia/Tokyo',
+  'Europe/London', 'America/New_York', 'America/Chicago', 'America/Los_Angeles',
+];
 
 const Settings = () => {
   const dispatch = useDispatch();
-  const { data, loading, error, updateSuccess, backupLoading, backupResult } = useSelector((state) => state.settings);
+  const { data, loading, error, updateSuccess, backupLoading, backupResult, sequencePreview, previewLoading } = useSelector((state) => state.settings);
   const { user } = useSelector((state) => state.auth);
 
   const isAdmin = user?.role === 'Admin';
@@ -39,12 +35,13 @@ const Settings = () => {
   const [savedSection, setSavedSection] = useState(null);
 
   const [businessForm, setBusinessForm] = useState({
-    companyName: '', address: '', gstin: '', stateCode: '24', phone: '', email: '',
+    companyName: '', address: '', gstin: '', stateCode: '24', phone: '', email: '', timezone: 'Asia/Kolkata',
   });
   const [sequenceForm, setSequenceForm] = useState({});
 
   useEffect(() => {
     dispatch(fetchSettings());
+    dispatch(fetchSequencePreview());
   }, [dispatch]);
 
   useEffect(() => {
@@ -56,11 +53,11 @@ const Settings = () => {
         stateCode: data.stateCode || '24',
         phone: data.phone || '',
         email: data.email || '',
+        timezone: data.timezone || 'Asia/Kolkata',
       });
       const seq = {};
       SEQUENCE_ROWS.forEach((row) => {
         seq[row.prefix] = data[row.prefix] || '';
-        seq[row.next] = data[row.next] || 1;
       });
       setSequenceForm(seq);
     }
@@ -82,8 +79,8 @@ const Settings = () => {
   };
 
   const handleSequenceChange = (e) => {
-    const { name, value, type } = e.target;
-    setSequenceForm((prev) => ({ ...prev, [name]: type === 'number' ? Number(value) : value.toUpperCase() }));
+    const { name, value } = e.target;
+    setSequenceForm((prev) => ({ ...prev, [name]: value.toUpperCase() }));
   };
 
   const cancelBusinessEdit = () => {
@@ -95,6 +92,7 @@ const Settings = () => {
       stateCode: data.stateCode || '24',
       phone: data.phone || '',
       email: data.email || '',
+      timezone: data.timezone || 'Asia/Kolkata',
     });
     setEditingBusiness(false);
     dispatch(clearSettingsError());
@@ -105,7 +103,6 @@ const Settings = () => {
     const seq = {};
     SEQUENCE_ROWS.forEach((row) => {
       seq[row.prefix] = data[row.prefix] || '';
-      seq[row.next] = data[row.next] || 1;
     });
     setSequenceForm(seq);
     setEditingSequences(false);
@@ -126,7 +123,7 @@ const Settings = () => {
   const saveSequences = async (e) => {
     e.preventDefault();
     if (!isAdmin) return;
-    if (!window.confirm('Document sequences are financial-critical. Changing prefixes or next numbers can cause numbering collisions. Are you sure you want to save these sequence changes?')) {
+    if (!window.confirm('Document series prefixes are financial-critical. Changing a prefix starts a fresh independent daily series. Are you sure you want to save these series changes?')) {
       return;
     }
     const result = await dispatch(updateSequenceSettings(sequenceForm));
@@ -134,6 +131,7 @@ const Settings = () => {
       setSavedSection('sequences');
       setEditingSequences(false);
       dispatch(fetchSettings());
+      dispatch(fetchSequencePreview());
     }
   };
 
@@ -260,6 +258,19 @@ const Settings = () => {
               className={inputClass(editingBusiness)}
             />
           </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-2">Business Timezone</label>
+            <select
+              name="timezone" value={businessForm.timezone} onChange={handleBusinessChange} disabled={!editingBusiness}
+              className={`${inputClass(editingBusiness)} font-mono`}
+            >
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-slate-500 mt-1">Drives document dates, financial year and daily sequences.</p>
+          </div>
         </div>
         {isAdmin && editingBusiness && (
           <div className="px-6 pb-6 flex justify-end gap-3">
@@ -282,11 +293,11 @@ const Settings = () => {
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/20 flex items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Document Sequences</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Financial-year numbering. Admin-only. Numbers are never reused.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Production format PREFIX-FYMMDD-SEQ (e.g. INV-26270906-001). Per-day series 001–999. Numbers are never reused.</p>
           </div>
           {isAdmin && !editingSequences && (
             <button type="button" onClick={() => setEditingSequences(true)} className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white text-sm font-medium rounded-xl transition border border-slate-300 dark:border-slate-700">
-              Edit Document Sequences
+              Edit Series Prefixes
             </button>
           )}
         </div>
@@ -303,36 +314,44 @@ const Settings = () => {
               <tr className="border-b border-slate-200 dark:border-slate-800">
                 <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Document Type</th>
                 <th className="pb-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Prefix</th>
-                <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">FY / Next</th>
+                <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">FY</th>
+                <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
+                <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Next</th>
                 <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Preview</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {SEQUENCE_ROWS.map((row) => {
-                const preview = fyPreview({ ...data, ...sequenceForm }, row);
+                const live = sequencePreview?.[row.key];
+                const prefix = editingSequences ? (sequenceForm[row.prefix] ?? '') : (live?.prefix ?? data?.[row.prefix] ?? '');
                 return (
-                  <tr key={row.prefix} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
+                  <tr key={row.key} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
                     <td className="py-4 text-sm font-medium text-slate-600 dark:text-slate-300">{row.label}</td>
                     <td className="py-4 px-4">
                       <input
-                        type="text" name={row.prefix} value={sequenceForm[row.prefix] ?? ''} onChange={handleSequenceChange} disabled={!editingSequences}
+                        type="text" name={row.prefix} value={prefix} onChange={handleSequenceChange} disabled={!editingSequences}
                         className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-sm text-slate-900 dark:text-white outline-none transition disabled:opacity-70 font-mono"
                       />
                     </td>
                     <td className="py-4">
-                      {editingSequences ? (
-                        <input
-                          type="number" name={row.next} value={sequenceForm[row.next] ?? 1} onChange={handleSequenceChange} disabled={!editingSequences} min="1"
-                          className="w-28 bg-white dark:bg-slate-950/60 border border-amber-500/40 focus:border-amber-500 rounded-lg px-3 py-1.5 text-sm text-slate-900 dark:text-white outline-none transition font-mono"
-                        />
-                      ) : (
-                        <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">FY {preview.fy} · Next {preview.next}</span>
-                      )}
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{live ? `${live.fyLabel} (${live.fyCode})` : '—'}</span>
                     </td>
                     <td className="py-4">
-                      <span className="font-mono text-sm text-indigo-600 dark:text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded">
-                        {preview.number}
-                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{live?.mmdd ?? '—'}</span>
+                    </td>
+                    <td className="py-4">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{live ? String(live.nextSeq).padStart(3, '0') : '—'}</span>
+                    </td>
+                    <td className="py-4">
+                      {previewLoading && !live ? (
+                        <span className="text-xs text-slate-500 font-mono">…</span>
+                      ) : live?.exhausted ? (
+                        <span className="font-mono text-xs text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-1 rounded">Series exhausted — new prefix required</span>
+                      ) : (
+                        <span className="font-mono text-sm text-indigo-600 dark:text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded">
+                          {live?.preview ?? '—'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -342,7 +361,7 @@ const Settings = () => {
           {editingSequences && (
             <p className="text-xs text-amber-400/90 mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5">
               <AlertTriangleIcon size={14} className="shrink-0 mt-0.5" />
-              <span>Sensitive operation: changing a prefix or lowering a next number can cause collisions. Saving requires confirmation and is audit-logged.</span>
+              <span>Sensitive operation: changing a prefix starts a fresh independent daily series from 001. Daily sequences (001–999) are automatic and never hand-edited or reused. Saving requires confirmation and is audit-logged.</span>
             </p>
           )}
         </div>

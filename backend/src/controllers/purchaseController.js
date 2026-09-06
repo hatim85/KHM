@@ -6,6 +6,7 @@ import Supplier from '../models/Supplier.js';
 import ApiError from '../utils/ApiError.js';
 import { logAudit } from '../utils/auditLogger.js';
 import { applyStockIn } from '../services/inventoryService.js';
+import { resolveDualQty } from '../services/lineItemService.js';
 
 export const getPurchases = async (req, res, next) => {
   try {
@@ -84,11 +85,14 @@ export const createPurchase = async (req, res, next) => {
 
     const processedItems = [];
     for (const item of items) {
-      const product = await Product.findById(item.product).populate('unit', 'shortName').session(session);
+      const product = await Product.findById(item.product).populate('unit', 'shortName').populate('secondaryUnit', 'shortName').session(session);
       if (!product) throw new ApiError(404, `Product not found: ${item.product}`);
-      const qty = Number(item.quantity);
       const rate = Number(item.rate);
-      const lineTotal = qty * rate;
+      // Dual quantities: primary always drives stock; rate follows pricingBasis.
+      const { qty, sec, secName, basis } = resolveDualQty({
+        product, quantity: item.quantity, secondaryQty: item.secondaryQty,
+      });
+      const lineTotal = (basis === 'SECONDARY' ? sec : qty) * rate;
       const lineTax = transactionType === 'TAX' ? Math.round((lineTotal * Number(item.taxRate || 0)) / 100) : 0;
 
       subTotal += lineTotal;
@@ -98,12 +102,16 @@ export const createPurchase = async (req, res, next) => {
         product: item.product,
         quantity: qty,
         rate,
+        secondaryQty: sec,
+        secondaryUnitName: secName,
+        pricingBasis: basis,
         taxRate: Number(item.taxRate) || 0,
         taxAmount: lineTax,
         total: lineTotal + lineTax,
         productName: product.name || '',
         sku: product.sku || '',
         hsnCode: product.hsnCode || '',
+        unitName: product.unit?.shortName || '',
       });
     }
 
@@ -136,11 +144,16 @@ export const createPurchase = async (req, res, next) => {
     // If COMPLETED, process stock and ledger
     if (status === 'COMPLETED') {
       for (const item of processedItems) {
-        // Single physical stock IN + WAC update (unit cost = purchase rate).
+        // Pool stock IN + WAC update. WAC is tracked per PRIMARY unit, so a
+        // SECONDARY-quoted rate is converted: total line cost / primary qty.
+        const unitCostPerPrimary = item.quantity > 0
+          ? Math.round(((item.pricingBasis === 'SECONDARY' ? item.secondaryQty : item.quantity) * item.rate) / item.quantity)
+          : item.rate;
         await applyStockIn({
           productId: item.product,
           quantity: item.quantity,
-          unitCostPaise: item.rate,
+          secondaryQuantity: item.secondaryQty || 0,
+          unitCostPaise: unitCostPerPrimary,
           stream: transactionType,
           referenceDocument: purchase._id,
           referenceModel: 'Purchase',
