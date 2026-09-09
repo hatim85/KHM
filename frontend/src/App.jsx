@@ -28,6 +28,8 @@ import Expenses from './pages/Expenses';
 import Reports from './pages/Reports';
 import AuditLogs from './pages/AuditLogs';
 
+import { PopupProvider } from './context/PopupContext';
+
 function App() {
   const dispatch = useDispatch();
 
@@ -37,56 +39,58 @@ function App() {
   }, [dispatch]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public Login Route */}
-        <Route path="/login" element={<Login />} />
+    <PopupProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Login Route */}
+          <Route path="/login" element={<Login />} />
 
-        {/* Protected ERP Routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <DashboardLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Dashboard />} />
-          
-          <Route path="sales">
-            <Route path="tax" element={<TaxBills />} />
-            <Route path="tax/new" element={<NewTaxBill />} />
-            <Route path="estimate" element={<EstimatedBills />} />
-            <Route path="estimate/new" element={<NewEstimatedBill />} />
-          </Route>
-          
-          <Route path="purchases">
-            <Route index element={<Purchases />} />
-            <Route path="new" element={<PurchaseForm />} />
+          {/* Protected ERP Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            
+            <Route path="sales">
+              <Route path="tax" element={<TaxBills />} />
+              <Route path="tax/new" element={<NewTaxBill />} />
+              <Route path="estimate" element={<EstimatedBills />} />
+              <Route path="estimate/new" element={<NewEstimatedBill />} />
+            </Route>
+            
+            <Route path="purchases">
+              <Route index element={<Purchases />} />
+              <Route path="new" element={<PurchaseForm />} />
+            </Route>
+
+            <Route path="inventory">
+              <Route index element={<Products />} />
+              <Route path="movements" element={<StockMovements />} />
+              <Route path="master" element={<MasterAttributes />} />
+            </Route>
+            <Route path="customers" element={<Customers />} />
+            <Route path="suppliers" element={<Suppliers />} />
+            <Route path="payments" element={<Payments />} />
+            <Route path="returns" element={<Returns />} />
+            <Route path="notes" element={<Notes />} />
+            <Route path="notes/new" element={<NewNote />} />
+            <Route path="ledger/:partyType/:partyId" element={<LedgerView />} />
+            <Route path="expenses" element={<Expenses />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="audit" element={<AuditLogs />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
 
-          <Route path="inventory">
-            <Route index element={<Products />} />
-            <Route path="movements" element={<StockMovements />} />
-            <Route path="master" element={<MasterAttributes />} />
-          </Route>
-          <Route path="customers" element={<Customers />} />
-          <Route path="suppliers" element={<Suppliers />} />
-          <Route path="payments" element={<Payments />} />
-          <Route path="returns" element={<Returns />} />
-          <Route path="notes" element={<Notes />} />
-          <Route path="notes/new" element={<NewNote />} />
-          <Route path="ledger/:partyType/:partyId" element={<LedgerView />} />
-          <Route path="expenses" element={<Expenses />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="audit" element={<AuditLogs />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-
-        {/* Catch-all fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </PopupProvider>
   );
 }
 

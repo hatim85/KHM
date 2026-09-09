@@ -6,7 +6,7 @@ import Product from '../models/Product.js';
 import Customer from '../models/Customer.js';
 import CompanySettings from '../models/CompanySettings.js';
 import ApiError from '../utils/ApiError.js';
-import { generateInvoicePDF } from '../utils/pdfGenerator.js';
+import { generateInvoicePDF, renderPdfBuffer, generateHTML } from '../utils/pdfGenerator.js';
 import { logAudit } from '../utils/auditLogger.js';
 import { getNextDocumentNumber } from '../utils/documentNumbering.js';
 import { isIntraStateSupply as checkIntraState } from '../utils/gstMaster.js';
@@ -55,9 +55,11 @@ const allocateSaleNumber = async ({ docType, invoiceDate }) => {
 };
 
 /** Build processed line items + totals for one partition of request lines. */
-const buildPartitionTotals = async ({ lines, transactionType, isIntraState, session }) => {
+const buildPartitionTotals = async ({ lines, transactionType, isIntraState, session, cartSubTotal = 0, cartDiscount = 0, cartDeliveryCharge = 0 }) => {
   let subTotal = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
   const processedItems = [];
+  
+  let rawSubTotal = 0;
   for (const item of lines) {
     const product = await Product.findById(item.product).populate('unit', 'shortName').populate('secondaryUnit', 'shortName').session(session);
     if (!product) throw new ApiError(404, `Product not found: ${item.product}`);
@@ -65,13 +67,32 @@ const buildPartitionTotals = async ({ lines, transactionType, isIntraState, sess
     const { qty, sec, secName, basis } = resolveDualQty({
       product, quantity: item.quantity, secondaryQty: item.secondaryQty,
     });
-    const billBase = (basis === 'SECONDARY' ? sec : qty) * item.rate;
+    const baseValue = (basis === 'SECONDARY' ? sec : qty) * item.rate;
+    rawSubTotal += baseValue;
+    item._resolved = { product, qty, sec, secName, basis, baseValue };
+  }
+
+  const effectiveTotalForProRata = cartSubTotal > 0 ? cartSubTotal : rawSubTotal;
+  let partitionDiscount = 0;
+  let partitionDeliveryCharge = 0;
+
+  for (const item of lines) {
+    const { product, qty, sec, secName, basis, baseValue } = item._resolved;
+    
+    const proportion = effectiveTotalForProRata > 0 ? baseValue / effectiveTotalForProRata : 0;
+    const itemDiscount = cartDiscount * proportion;
+    const itemDelivery = cartDeliveryCharge * proportion;
+    const finalBillBase = baseValue - itemDiscount + itemDelivery;
+
+    partitionDiscount += itemDiscount;
+    partitionDeliveryCharge += itemDelivery;
+
     const gstRate = product.gstRate || 0;
     const { taxableValue, cgst, sgst, igst, total: itemTotal } = applyGst({
-      billBase, gstRate, isTax: transactionType === 'TAX', intra: isIntraState,
+      billBase: finalBillBase, gstRate, isTax: transactionType === 'TAX', intra: isIntraState,
     });
 
-    subTotal += taxableValue;
+    subTotal += baseValue;
     totalCgst += cgst;
     totalSgst += sgst;
     totalIgst += igst;
@@ -84,7 +105,7 @@ const buildPartitionTotals = async ({ lines, transactionType, isIntraState, sess
       secondaryUnitName: secName,
       pricingBasis: basis,
       specification: String(product.specification || '').trim().slice(0, 500),
-      taxableValue,
+      taxableValue: baseValue,
       gstRate,
       cgst,
       sgst,
@@ -96,16 +117,17 @@ const buildPartitionTotals = async ({ lines, transactionType, isIntraState, sess
       unitName: product.unit?.shortName || '',
     });
   }
-  return { processedItems, subTotal, totalCgst, totalSgst, totalIgst };
+  return { processedItems, subTotal, totalCgst, totalSgst, totalIgst, partitionDiscount: Math.round(partitionDiscount), partitionDeliveryCharge: Math.round(partitionDeliveryCharge) };
 };
 
 const createSaleDocument = async ({
   session, transactionType, billType, splitGroupId,
   customerId, custDoc, settings, invoiceNumber, financialYear, documentDate,
   invoiceDate, processedItems, subTotal, totalCgst, totalSgst, totalIgst,
-  discount, status, remarks, dispatchThrough, idempotencyKey,
+  discount, deliveryCharge, status, remarks, dispatchThrough, idempotencyKey,
 }) => {
-  const grandTotal = subTotal + totalCgst + totalSgst + totalIgst - discount;
+  const parsedDeliveryCharge = Number(deliveryCharge) || 0;
+  const grandTotal = subTotal + totalCgst + totalSgst + totalIgst - discount + parsedDeliveryCharge;
   const sale = new Sale({
     transactionType,
     billType,
@@ -121,6 +143,7 @@ const createSaleDocument = async ({
     totalSgst,
     totalIgst,
     discount,
+    deliveryCharge: parsedDeliveryCharge,
     grandTotal,
     status,
     remarks,
@@ -193,7 +216,7 @@ export const createSale = async (req, res, next) => {
   let idempotencyKey;
 
   try {
-    const { transactionType, customer, invoiceDate, items, status, discount, remarks, dispatchThrough } = req.body;
+    const { transactionType, customer, invoiceDate, items, status, discount, deliveryCharge, remarks, dispatchThrough } = req.body;
     // NOTE: client-supplied invoice numbers are ignored — document numbers
     // are generated ONLY on the backend (PREFIX-FYMMDD-SEQ).
 
@@ -310,25 +333,42 @@ export const createSale = async (req, res, next) => {
       partitions.push({ lines: taxableLines.length ? taxableLines : items, billType: 'TAX_INVOICE', docType: fallbackDocType, idemKey: idempotencyKey });
     }
 
-    // Totals first (discount is pro-rated across partitions by taxable value
-    // so the two bills sum exactly to the submitted discount).
-    const built = [];
-    for (const p of partitions) {
-      const totals = await buildPartitionTotals({ lines: p.lines, transactionType, isIntraState, session });
-      built.push({ ...p, ...totals });
-    }
-    const combinedSub = built.reduce((s, b) => s + b.subTotal, 0);
-    let discountLeft = parsedDiscount;
-    built.forEach((b, i) => {
-      if (built.length === 1) {
-        b.discount = parsedDiscount;
-      } else if (i < built.length - 1) {
-        b.discount = combinedSub > 0 ? Math.round((parsedDiscount * b.subTotal) / combinedSub) : 0;
-        discountLeft -= b.discount;
-      } else {
-        b.discount = discountLeft;
+    const parsedDeliveryCharge = Number(deliveryCharge) || 0;
+
+    let cartSubTotal = 0;
+    for (const item of items) {
+      const product = await Product.findById(item.product).session(session);
+      if (product) {
+        const { qty, sec, basis } = resolveDualQty({ product, quantity: item.quantity, secondaryQty: item.secondaryQty });
+        cartSubTotal += (basis === 'SECONDARY' ? sec : qty) * item.rate;
       }
-    });
+    }
+
+    const built = [];
+    let discountLeft = parsedDiscount;
+    let deliveryLeft = parsedDeliveryCharge;
+    for (let i = 0; i < partitions.length; i++) {
+      const p = partitions[i];
+      const totals = await buildPartitionTotals({ 
+        lines: p.lines, transactionType, isIntraState, session,
+        cartSubTotal, cartDiscount: parsedDiscount, cartDeliveryCharge: parsedDeliveryCharge
+      });
+      
+      let finalDiscount = totals.partitionDiscount;
+      let finalDelivery = totals.partitionDeliveryCharge;
+      if (partitions.length === 1) {
+        finalDiscount = parsedDiscount;
+        finalDelivery = parsedDeliveryCharge;
+      } else if (i === partitions.length - 1) {
+        finalDiscount = discountLeft;
+        finalDelivery = deliveryLeft;
+      } else {
+        discountLeft -= finalDiscount;
+        deliveryLeft -= finalDelivery;
+      }
+      
+      built.push({ ...p, ...totals, discount: finalDiscount, deliveryCharge: finalDelivery });
+    }
 
     // Numbers are immutable after finalization — allocate before persisting.
     for (const b of built) {
@@ -346,7 +386,7 @@ export const createSale = async (req, res, next) => {
         invoiceNumber: b.invoiceNumber, financialYear: b.financialYear, documentDate: b.documentDate,
         invoiceDate, processedItems: b.processedItems,
         subTotal: b.subTotal, totalCgst: b.totalCgst, totalSgst: b.totalSgst, totalIgst: b.totalIgst,
-        discount: b.discount, status, remarks, dispatchThrough,
+        discount: b.discount, deliveryCharge: b.deliveryCharge, status, remarks, dispatchThrough,
         idempotencyKey: b.idemKey,
       });
       created.push(sale);
@@ -443,85 +483,92 @@ export const convertEstimateToTax = async (req, res, next) => {
     if (!custDoc) throw new ApiError(404, 'Customer not found');
     const isIntraState = checkIntraState(companyStateCode, custDoc.stateCode || '24');
 
-    const processedItems = [];
+    const activeItems = [];
     for (const line of estimate.items) {
-      // Return-aware conversion: only the not-yet-returned quantity is billed.
       const returned = await alreadyReturnedQty('Sale', estimate._id, line.product, session);
       const qty = Number(line.quantity) - returned;
       if (qty <= 0) continue; // fully returned line — nothing left to bill
-      const product = await Product.findById(line.product).populate('unit', 'shortName').session(session);
-      if (!product) throw new ApiError(404, `Product not found: ${line.product}`);
-      const rate = Number(line.rate);
-      // Carry the estimate line's dual quantities, pro-rated to the remainder.
+      
       const ratio = qty / Number(line.quantity);
       const sec = Number(line.secondaryQty) || 0;
       const billSec = sec > 0 ? Math.round(sec * ratio * 1000) / 1000 : 0;
-      const basis = line.pricingBasis === 'SECONDARY' ? 'SECONDARY' : 'PRIMARY';
-      const billBase = (basis === 'SECONDARY' ? billSec : qty) * rate; // Rate is exclusive of GST
-      const gstRate = product.gstRate || 0;
-      const { taxableValue, cgst, sgst, igst, total: lineTotal } = applyGst({
-        billBase, gstRate, isTax: true, intra: isIntraState,
-      });
-      processedItems.push({
+      
+      activeItems.push({
         product: line.product,
         quantity: qty,
-        rate,
-        secondaryQty: billSec,
-        secondaryUnitName: line.secondaryUnitName || '',
-        pricingBasis: basis,
-        specification: String(line.specification || '').trim().slice(0, 500),
-        taxableValue,
-        gstRate,
-        cgst,
-        sgst,
-        igst,
-        total: lineTotal,
-        productName: product.name || '',
-        sku: product.sku || '',
-        hsnCode: product.hsnCode || '',
-        unitName: product.unit?.shortName || '',
+        rate: line.rate,
+        secondaryQty: billSec
       });
     }
 
-    if (processedItems.length === 0) {
+    if (activeItems.length === 0) {
       throw new ApiError(400, 'Nothing left to convert — all estimate lines were fully returned.');
     }
 
-    const estimateDiscount = Number(estimate.discount) || 0;
-    const taxablePart = processedItems.filter((l) => Number(l.gstRate) > 0);
-    const exemptPart = processedItems.filter((l) => !(Number(l.gstRate) > 0));
-    const convSplit = taxablePart.length > 0 && exemptPart.length > 0;
-    const convGroupId = convSplit ? new mongoose.Types.ObjectId() : null;
-
-    const subPart = (lines) => lines.reduce((s, l) => s + l.taxableValue, 0);
-    const convParts = [];
-    if (convSplit) {
-      convParts.push({ lines: taxablePart, billType: 'TAX_INVOICE', docType: 'TAX' });
-      convParts.push({ lines: exemptPart, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY' });
-    } else if (exemptPart.length > 0) {
-      convParts.push({ lines: exemptPart, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY' });
-    } else {
-      convParts.push({ lines: taxablePart, billType: 'TAX_INVOICE', docType: 'TAX' });
+    let exemptLines = [];
+    let taxableLines = [];
+    for (const item of activeItems) {
+      const product = await Product.findById(item.product).select('gstRate').session(session);
+      if (!product) throw new ApiError(404, `Product not found: ${item.product}`);
+      const gstRate = Number(product.gstRate) || 0;
+      if (gstRate === 0) exemptLines.push(item);
+      else taxableLines.push(item);
     }
-    // Pro-rate the estimate discount across the split pair by taxable value.
-    const convSubTotal = convParts.reduce((s, p) => s + subPart(p.lines), 0);
-    let convDiscountLeft = estimateDiscount;
-    convParts.forEach((p, i) => {
-      const st = subPart(p.lines);
-      const cg = p.lines.reduce((s, l) => s + l.cgst, 0);
-      const sg = p.lines.reduce((s, l) => s + l.sgst, 0);
-      const ig = p.lines.reduce((s, l) => s + l.igst, 0);
-      p.subTotal = st; p.totalCgst = cg; p.totalSgst = sg; p.totalIgst = ig;
-      if (convParts.length === 1) p.discount = estimateDiscount;
-      else if (i < convParts.length - 1) {
-        p.discount = convSubTotal > 0 ? Math.round((estimateDiscount * st) / convSubTotal) : 0;
-        convDiscountLeft -= p.discount;
-      } else p.discount = convDiscountLeft;
-      p.grandTotal = st + cg + sg + ig - p.discount;
-    });
+    const isSplit = exemptLines.length > 0 && taxableLines.length > 0;
+    const isBillOfSupplyOnly = exemptLines.length > 0 && taxableLines.length === 0;
+    const convGroupId = isSplit ? new mongoose.Types.ObjectId() : null;
+
+    const partitions = [];
+    if (isSplit) {
+      partitions.push({ lines: taxableLines, billType: 'TAX_INVOICE', docType: 'TAX' });
+      partitions.push({ lines: exemptLines, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY' });
+    } else if (isBillOfSupplyOnly) {
+      partitions.push({ lines: exemptLines, billType: 'BILL_OF_SUPPLY', docType: 'SUPPLY' });
+    } else {
+      partitions.push({ lines: taxableLines.length ? taxableLines : activeItems, billType: 'TAX_INVOICE', docType: 'TAX' });
+    }
+
+    const estimateDiscount = Number(estimate.discount) || 0;
+    const estimateDeliveryCharge = Number(estimate.deliveryCharge) || 0;
+
+    let cartSubTotal = 0;
+    for (const item of activeItems) {
+      const product = await Product.findById(item.product).session(session);
+      if (product) {
+        const { qty, sec, basis } = resolveDualQty({ product, quantity: item.quantity, secondaryQty: item.secondaryQty });
+        cartSubTotal += (basis === 'SECONDARY' ? sec : qty) * item.rate;
+      }
+    }
+
+    const built = [];
+    let discountLeft = estimateDiscount;
+    let deliveryLeft = estimateDeliveryCharge;
+    for (let i = 0; i < partitions.length; i++) {
+      const p = partitions[i];
+      const totals = await buildPartitionTotals({ 
+        lines: p.lines, transactionType: 'TAX', isIntraState, session,
+        cartSubTotal, cartDiscount: estimateDiscount, cartDeliveryCharge: estimateDeliveryCharge
+      });
+      
+      let finalDiscount = totals.partitionDiscount;
+      let finalDelivery = totals.partitionDeliveryCharge;
+      if (partitions.length === 1) {
+        finalDiscount = estimateDiscount;
+        finalDelivery = estimateDeliveryCharge;
+      } else if (i === partitions.length - 1) {
+        finalDiscount = discountLeft;
+        finalDelivery = deliveryLeft;
+      } else {
+        discountLeft -= finalDiscount;
+        deliveryLeft -= finalDelivery;
+      }
+      
+      const grandTotal = totals.subTotal + totals.totalCgst + totals.totalSgst + totals.totalIgst - finalDiscount + finalDelivery;
+      built.push({ ...p, ...totals, discount: finalDiscount, deliveryCharge: finalDelivery, grandTotal });
+    }
 
     const converted = [];
-    for (const p of convParts) {
+    for (const p of built) {
       const generated = await getNextDocumentNumber(p.docType, new Date());
       const invoice = new Sale({
         transactionType: 'TAX',
@@ -538,6 +585,7 @@ export const convertEstimateToTax = async (req, res, next) => {
         totalSgst: p.totalSgst,
         totalIgst: p.totalIgst,
         discount: p.discount,
+        deliveryCharge: p.deliveryCharge,
         grandTotal: p.grandTotal,
       status: 'COMPLETED',
       remarks: `Converted from estimate ${estimate.invoiceNumber}`,
@@ -774,6 +822,99 @@ export const publicSalePdf = async (req, res, next) => {
     const sale = await Sale.findById(req.params.id);
     // Remove no-store for public PDF so it can be cached reasonably if needed, though private is okay
     await streamPdfToResponse(sale, res, 'inline');
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const generateCustomPdf = async (req, res, next) => {
+  try {
+    const { transactionType, billType, customer, invoiceNumber, invoiceDate, items, discount, deliveryCharge, remarks, dispatchThrough } = req.body;
+    
+    if (!transactionType || !['TAX', 'ESTIMATE'].includes(transactionType)) {
+      throw new ApiError(400, 'A valid transactionType (TAX or ESTIMATE) is required.');
+    }
+    if (!invoiceNumber) throw new ApiError(400, 'Invoice number is required for custom PDF.');
+
+    let settings = await CompanySettings.findOne();
+    if (!settings) {
+      settings = await new CompanySettings({ isSingleton: true }).save();
+    }
+    const companyStateCode = settings ? settings.stateCode : '24';
+    
+    // We can accept customer as an ID (existing customer) or an object (free text for draft)
+    let custDoc = { name: 'Cash Customer', gstin: '', address: '', phone: '', stateCode: '24' };
+    let isIntraState = true;
+    
+    if (customer && mongoose.isValidObjectId(customer)) {
+      const dbCust = await Customer.findById(customer);
+      if (dbCust) {
+        custDoc = dbCust;
+        isIntraState = checkIntraState(companyStateCode, custDoc.stateCode || '24');
+      }
+    } else if (typeof customer === 'object') {
+      custDoc = { ...custDoc, ...customer };
+      isIntraState = checkIntraState(companyStateCode, custDoc.stateCode || '24');
+    }
+
+    const parsedDiscount = Number(discount) || 0;
+    const parsedDeliveryCharge = Number(deliveryCharge) || 0;
+
+    const { processedItems, subTotal, totalCgst, totalSgst, totalIgst, partitionDiscount, partitionDeliveryCharge } = await buildPartitionTotals({
+      lines: items,
+      transactionType,
+      isIntraState,
+      session: null,
+      cartDiscount: parsedDiscount,
+      cartDeliveryCharge: parsedDeliveryCharge
+    });
+
+    const grandTotal = subTotal + totalCgst + totalSgst + totalIgst - partitionDiscount + partitionDeliveryCharge;
+
+    const dummySale = {
+      transactionType,
+      billType: billType || 'TAX_INVOICE',
+      invoiceNumber,
+      invoiceDate: invoiceDate ? new Date(invoiceDate) : new Date(),
+      items: processedItems,
+      subTotal,
+      totalCgst,
+      totalSgst,
+      totalIgst,
+      discount: partitionDiscount,
+      deliveryCharge: partitionDeliveryCharge,
+      grandTotal,
+      remarks: remarks || '',
+      dispatchThrough: dispatchThrough || '',
+      customerSnapshot: {
+        name: custDoc.name || '',
+        gstin: custDoc.gstin || '',
+        address: custDoc.address || '',
+        phone: custDoc.phone || '',
+        stateCode: custDoc.stateCode || '',
+      },
+      companySnapshot: {
+        companyName: settings.companyName || '',
+        address: settings.address || '',
+        gstin: settings.gstin || '',
+        stateCode: settings.stateCode || '',
+        phone: settings.phone || '',
+        email: settings.email || '',
+      }
+    };
+
+    const htmlContent = generateHTML(dummySale, settings, null); // null for QR code
+    const pdfBuffer = await renderPdfBuffer(htmlContent);
+
+    const safeFilename = `Custom_${invoiceNumber.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`;
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    res.end(pdfBuffer);
   } catch (error) {
     next(error);
   }

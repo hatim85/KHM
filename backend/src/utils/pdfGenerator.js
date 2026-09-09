@@ -46,7 +46,9 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
   const publicUrl = `${baseUrl}/api/sales/${saleData._id}/pdf/public`;
 
   // Generate QR Code data URI
-  const qrCodeDataUri = await QRCode.toDataURL(publicUrl, { width: 100, margin: 1 });
+  const qrCodeDataUri = saleData.transactionType === 'ESTIMATE'
+  ? null
+  : await QRCode.toDataURL(publicUrl, { width: 100, margin: 1 });
 
   // 1. Generate HTML Content
   const htmlContent = generateHTML(saleData, companySettings, qrCodeDataUri);
@@ -57,7 +59,7 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
 };
 
 /** Shared HTML → PDF buffer step (puppeteer). */
-const renderPdfBuffer = async (htmlContent) => {
+export const renderPdfBuffer = async (htmlContent) => {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
@@ -137,6 +139,10 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
   const company = (sale.companySnapshot && sale.companySnapshot.companyName)
     ? { ...companySettings, ...sale.companySnapshot }
     : (companySettings || sale.companySnapshot || {});
+
+  const uniqueGstRates = [...new Set(sale.items.map(i => i.gstRate || 0).filter(r => r > 0))];
+  const isSingleTaxRate = uniqueGstRates.length === 1;
+  const mainGstRate = isSingleTaxRate ? uniqueGstRates[0] : null;
   const custLive = sale.customer || {};
   const custSnap = sale.customerSnapshot || {};
   const customer = {
@@ -271,6 +277,15 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
   } else {
     rowsHtml = sale.items.map((item, index) => {
       const prod = prodOf(item);
+      const grossTaxable = item.taxableValue; // baseValue without discount
+      const taxRate = item.gstRate || 0;
+      
+      const displayTaxAmount = Math.round(grossTaxable * (taxRate / 100));
+      const displayIgst = displayTaxAmount;
+      const displayCgst = Math.round(displayTaxAmount / 2);
+      const displaySgst = displayTaxAmount - displayCgst;
+      const displayTotal = grossTaxable + displayTaxAmount;
+
       return `
       <tr>
         <td class="text-center">${index + 1}</td>
@@ -285,14 +300,14 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         </td>
         <td class="text-center">${qtyCell(item)}</td>
         <td class="text-right">₹${formatMoney(item.rate)}</td>
-        <td class="text-right">₹${formatMoney(item.taxableValue)}</td>
+        <td class="text-right">₹${formatMoney(grossTaxable)}</td>
         ${hasIgst ? `
-        <td class="text-right"><div class="tax-rate">${item.gstRate}%</div>₹${formatMoney(item.igst)}</td>
+        <td class="text-right"><div class="tax-rate">${taxRate}%</div>₹${formatMoney(displayIgst)}</td>
         ` : `
-        <td class="text-right"><div class="tax-rate">${item.gstRate / 2}%</div>₹${formatMoney(item.cgst)}</td>
-        <td class="text-right"><div class="tax-rate">${item.gstRate / 2}%</div>₹${formatMoney(item.sgst)}</td>
+        <td class="text-right"><div class="tax-rate">${taxRate / 2}%</div>₹${formatMoney(displayCgst)}</td>
+        <td class="text-right"><div class="tax-rate">${taxRate / 2}%</div>₹${formatMoney(displaySgst)}</td>
         `}
-        <td class="text-right font-bold">₹${formatMoney(item.total)}</td>
+        <td class="text-right font-bold">₹${formatMoney(displayTotal)}</td>
       </tr>
     `;
     }).join('');
@@ -309,7 +324,20 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         .invoice-box { max-width: 800px; margin: auto; padding: 20px 24px; }
         
         .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 12px; border-bottom: 3px solid ${accent}; margin-bottom: 8px; }
-        
+        .estimate-header {
+          justify-content: center;
+          align-items: center;
+          min-height: 55px;
+        }
+
+        .estimate-header-title {
+          width: 100%;
+          text-align: center;
+        }
+
+        .estimate-header-title .invoice-title {
+          margin: 0;
+        }
         .company-name { font-size: 28px; font-weight: 800; color: #0f172a; margin: 0 0 5px 0; letter-spacing: -0.5px; }
         .company-details { font-size: 13px; color: #64748b; }
         .company-details strong { color: #334155; font-weight: 600; }
@@ -461,19 +489,25 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
     </head>
     <body>
       <div class="invoice-box">
-        <div class="header">
-          <div>
-            <h1 class="company-name">${company?.companyName || 'KHM Wholesale'}</h1>
-            <div class="company-details">
-              ${company?.address || 'Address'}<br>
-              ${!isEstimate ? `<strong>GSTIN:</strong> ${company?.gstin || 'N/A'} &nbsp;|&nbsp; <strong>State:</strong> ${getCompanyState(company?.stateCode)}<br>` : ''}
-              <strong>Phone:</strong> ${company?.phone || 'N/A'}
+        <div class="header ${isEstimate ? 'estimate-header' : ''}">
+          ${isEstimate ? `
+            <div class="estimate-header-title">
+              <div class="invoice-title">${title}</div>
             </div>
-          </div>
-          <div class="title-section">
-            <div class="invoice-title">${title}</div>
-            ${qrCodeDataUri ? `<img src="${qrCodeDataUri}" class="qr-code" alt="QR Code" />` : ''}
-          </div>
+          ` : `
+            <div>
+              <h1 class="company-name">${company?.companyName || 'KHM Wholesale'}</h1>
+              <div class="company-details">
+                ${company?.address || 'Address'}<br>
+                <strong>GSTIN:</strong> ${company?.gstin || 'N/A'} &nbsp;|&nbsp; <strong>State:</strong> ${getCompanyState(company?.stateCode)}<br>
+                <strong>Phone:</strong> ${company?.phone || 'N/A'}
+              </div>
+            </div>
+            <div class="title-section">
+              <div class="invoice-title">${title}</div>
+              ${qrCodeDataUri ? `<img src="${qrCodeDataUri}" class="qr-code" alt="QR Code" />` : ''}
+            </div>
+          `}
         </div>
 
         <div class="bill-info-container">
@@ -576,30 +610,40 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           
           <table class="totals-table">
             <tr>
-              <td class="label">${isBillOfSupply ? 'Exempt Value:' : 'Taxable Amount:'}</td>
+              <td class="label">${isBillOfSupply ? 'Exempt Value:' : 'Subtotal:'}</td>
               <td>₹${formatMoney(sale.subTotal)}</td>
             </tr>
+            ${sale.discount > 0 ? `
+            <tr>
+              <td class="label">Discount:</td>
+              <td style="color: #10B981;">- ₹${formatMoney(sale.discount)}</td>
+            </tr>` : ''}
+            ${sale.deliveryCharge > 0 ? `
+            <tr>
+              <td class="label">Delivery Charge:</td>
+              <td>₹${formatMoney(sale.deliveryCharge)}</td>
+            </tr>` : ''}
+            ${!isEstimate && !isBillOfSupply ? `
+            <tr>
+              <td class="label">Taxable Value:</td>
+              <td>₹${formatMoney(sale.subTotal - sale.discount + sale.deliveryCharge)}</td>
+            </tr>` : ''}
             ${!isEstimate && !isBillOfSupply && hasIgst ? `
             <tr>
-              <td class="label">Total IGST:</td>
+              <td class="label">${mainGstRate ? `IGST @ ${mainGstRate}%:` : 'Total IGST:'}</td>
               <td>₹${formatMoney(sale.totalIgst)}</td>
             </tr>
             ` : ''}
             ${!isEstimate && !isBillOfSupply && !hasIgst ? `
             <tr>
-              <td class="label">Total CGST:</td>
+              <td class="label">${mainGstRate ? `CGST @ ${mainGstRate/2}%:` : 'Total CGST:'}</td>
               <td>₹${formatMoney(sale.totalCgst)}</td>
             </tr>
             <tr>
-              <td class="label">Total SGST:</td>
+              <td class="label">${mainGstRate ? `SGST @ ${mainGstRate/2}%:` : 'Total SGST:'}</td>
               <td>₹${formatMoney(sale.totalSgst)}</td>
             </tr>
             ` : ''}
-            ${sale.discount > 0 ? `
-            <tr>
-              <td class="label">Discount:</td>
-              <td style="color: #ef4444;">- ₹${formatMoney(sale.discount)}</td>
-            </tr>` : ''}
             <tr class="grand-total-row">
               <td class="label">Grand Total:</td>
               <td>₹${formatMoney(sale.grandTotal)}</td>
@@ -608,13 +652,18 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
         </div>
         
         <div class="signatory-section">
+          ${!isEstimate ? `
           <div class="signatory-company">For ${company?.companyName || 'KHM Wholesale'}</div>
+          ` : ''}
           <div class="signatory-line">Authorized Signatory</div>
         </div>
 
+        ${!isEstimate ? `
         <div class="footer">
-          ${isEstimate ? 'Thank you for your business!' : isBillOfSupply ? 'Thank you for your business! This is a computer generated bill of supply.' : 'Thank you for your business! This is a computer generated tax invoice.'}
+          <div>${isBillOfSupply ? 'Thank you for your business! This is a computer generated bill of supply.' : 'Thank you for your business! This is a computer generated tax invoice.'}</div>
+          <div style="margin-top: 5px;">Subject to Ahmedabad Jurisdiction only!</div>
         </div>
+        ` : ''}
       </div>
     </body>
     </html>

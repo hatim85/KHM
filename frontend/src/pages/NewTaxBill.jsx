@@ -22,9 +22,14 @@ const NewTaxBill = () => {
     invoiceDate: new Date().toISOString().split('T')[0],
     status: 'COMPLETED',
     discount: 0,
+    deliveryCharge: 0,
     remarks: '',
     dispatchThrough: '',
+    customInvoiceNumber: '',
+    customCustomerName: '',
   });
+
+  const [isCustomMode, setIsCustomMode] = useState(false);
 
   const [items, setItems] = useState([
     { product: '', quantity: 1, rate: 0, gstRate: 0, secondaryQty: 0 }
@@ -86,20 +91,36 @@ const NewTaxBill = () => {
   const customerStateCode = selectedCustomer ? (selectedCustomer.stateCode || '24') : '24';
   const isIntraState = companyStateCode === customerStateCode;
 
+
+  // First pass: raw bill bases
+  let rawSubTotal = 0;
+  const rawItems = items.map(item => {
+    const rate = parseFloat(item.rate) || 0;
+    const qty = parseFloat(item.quantity) || 0;
+    const prod = products.find(p => p._id === item.product);
+    const sec = parseFloat(item.secondaryQty) || 0;
+    const billQty = prod?.pricingBasis === 'SECONDARY' ? sec : qty;
+    const baseValue = rate * billQty;
+    rawSubTotal += baseValue;
+    return { ...item, baseValue, prod };
+  });
+
+  const parsedDiscount = parseFloat(formData.discount) || 0;
+  const parsedDeliveryCharge = parseFloat(formData.deliveryCharge) || 0;
+
   let subTotal = 0;
   let totalCgst = 0;
   let totalSgst = 0;
   let totalIgst = 0;
 
-  const calculatedItems = items.map(item => {
-    const rate = parseFloat(item.rate) || 0;
-    const qty = parseFloat(item.quantity) || 0;
-    const prod = products.find(p => p._id === item.product);
-    const sec = parseFloat(item.secondaryQty) || 0;
-    // Preview mirrors backend pricing: rate applies to the pricing-basis unit.
-    const billQty = prod?.pricingBasis === 'SECONDARY' ? sec : qty;
-    const taxableValue = rate * billQty;
-
+  const calculatedItems = rawItems.map(item => {
+    const proportion = rawSubTotal > 0 ? item.baseValue / rawSubTotal : 0;
+    const itemDiscount = parsedDiscount * proportion;
+    const itemDelivery = parsedDeliveryCharge * proportion;
+    
+    // Final taxable value per item for tax calculation
+    const taxableValue = item.baseValue - itemDiscount + itemDelivery;
+    
     const gstRate = parseFloat(item.gstRate) || 0;
     const taxAmount = taxableValue * (gstRate / 100);
 
@@ -113,17 +134,16 @@ const NewTaxBill = () => {
 
     const lineTotal = taxableValue + taxAmount;
 
-    subTotal += taxableValue;
+    subTotal += item.baseValue; // keep subtotal raw for display
     totalCgst += cgst;
     totalSgst += sgst;
     totalIgst += igst;
 
-    return { ...item, taxableValue, cgst, sgst, igst, lineTotal };
+    return { ...item, taxableValue: item.baseValue, cgst, sgst, igst, lineTotal };
   });
 
-  const parsedDiscount = parseFloat(formData.discount) || 0;
   const totalTax = totalCgst + totalSgst + totalIgst;
-  const grandTotal = subTotal + totalTax - parsedDiscount;
+  const grandTotal = subTotal - parsedDiscount + parsedDeliveryCharge + totalTax;
 
   // GST split preview (backend-authoritative on product.gstRate):
   // 0%-GST lines go on a Bill of Supply, the rest on a Tax Invoice.
@@ -171,7 +191,6 @@ const NewTaxBill = () => {
       return;
     }
 
-    const result = await dispatch(createSale(submissionData));
     if (!result.error) {
       const split = result.payload?.splitBills || (result.payload?.data ? [result.payload.data] : []);
       if (split.length > 1) {
@@ -182,6 +201,54 @@ const NewTaxBill = () => {
         alert(`All items are 0% GST — Bill of Supply ${split[0]?.invoiceNumber} created (exempt under Notification No. 12/2017-Central Tax (Rate)).`);
       }
       navigate('/sales/tax');
+    }
+  };
+
+  const handleCustomPdfDownload = async () => {
+    if (items.some(i => !i.product)) return alert("Please select a product for all rows.");
+    if (!formData.customInvoiceNumber) return alert("Please enter an Invoice Number for the Custom PDF.");
+
+    const submissionData = {
+      ...formData,
+      transactionType: 'TAX',
+      customer: formData.customer,
+      invoiceNumber: formData.customInvoiceNumber,
+      discount: Math.round(parsedDiscount * 100),
+      deliveryCharge: Math.round(parsedDeliveryCharge * 100),
+      items: items.map(i => ({
+        product: i.product,
+        quantity: Number(i.quantity),
+        rate: Math.round(Number(i.rate) * 100),
+        secondaryQty: Number(i.secondaryQty) || 0,
+      }))
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/sales/custom-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(submissionData)
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to generate custom PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Custom_${formData.customInvoiceNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -206,6 +273,12 @@ const NewTaxBill = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">New Tax Bill</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Create an official GST Invoice.</p>
+        </div>
+        <div className="ml-auto flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            <input type="checkbox" checked={isCustomMode} onChange={(e) => setIsCustomMode(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+            Custom/Draft PDF Mode
+          </label>
         </div>
       </div>
 
@@ -233,6 +306,12 @@ const NewTaxBill = () => {
           </div>
 
           {/* Numbers are generated on the backend (PREFIX-FYMMDD-SEQ) and shown after saving. */}
+          {isCustomMode && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Custom Invoice Number *</label>
+              <input required type="text" value={formData.customInvoiceNumber} onChange={(e) => setFormData({ ...formData, customInvoiceNumber: e.target.value })} placeholder="e.g. INV/26-27/001" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Invoice Date *</label>
@@ -371,7 +450,7 @@ const NewTaxBill = () => {
                               </label>
 
                               <input
-                                required={selectedProductInfo?.pricingBasis === 'SECONDARY'}
+                                required={false}
                                 type="number"
                                 min="0"
                                 step="any"
@@ -472,6 +551,11 @@ const NewTaxBill = () => {
                 <span className="text-sm text-slate-500 dark:text-slate-400">Discount (₹)</span>
                 <input type="number" min="0" step="0.01" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: e.target.value })} className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded px-2 py-1 text-sm text-right text-slate-900 dark:text-white outline-none font-mono" />
               </div>
+              
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Delivery Charge (₹)</span>
+                <input type="number" min="0" step="0.01" value={formData.deliveryCharge} onChange={(e) => setFormData({ ...formData, deliveryCharge: e.target.value })} className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded px-2 py-1 text-sm text-right text-slate-900 dark:text-white outline-none font-mono" />
+              </div>
 
               <div className="h-px w-full bg-slate-200 dark:bg-slate-800 my-2"></div>
 
@@ -481,9 +565,15 @@ const NewTaxBill = () => {
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading ? 'Processing...' : isOffline ? 'Save Offline' : (formData.status === 'COMPLETED' ? 'Save & Generate GST PDF' : 'Save Draft')}
-            </button>
+            {!isCustomMode ? (
+              <button type="submit" disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold rounded-2xl shadow-xl shadow-indigo-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading ? 'Processing...' : isOffline ? 'Save Offline' : (formData.status === 'COMPLETED' ? 'Save & Generate GST PDF' : 'Save Draft')}
+              </button>
+            ) : (
+              <button type="button" onClick={handleCustomPdfDownload} disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-xl shadow-emerald-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                Download Custom PDF
+              </button>
+            )}
           </div>
         </div>
 

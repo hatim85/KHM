@@ -20,9 +20,14 @@ const NewEstimatedBill = () => {
     invoiceDate: new Date().toISOString().split('T')[0],
     status: 'COMPLETED',
     discount: 0,
+    deliveryCharge: 0,
     remarks: '',
     dispatchThrough: '',
+    customInvoiceNumber: '',
+    customCustomerName: '',
   });
+
+  const [isCustomMode, setIsCustomMode] = useState(false);
 
   const [items, setItems] = useState([
     { product: '', quantity: 1, rate: 0, secondaryQty: 0 }
@@ -90,7 +95,8 @@ const NewEstimatedBill = () => {
   });
 
   const parsedDiscount = parseFloat(formData.discount) || 0;
-  const grandTotal = subTotal - parsedDiscount;
+  const parsedDeliveryCharge = parseFloat(formData.deliveryCharge) || 0;
+  const grandTotal = subTotal - parsedDiscount + parsedDeliveryCharge;
 
   const saveToIndexedDB = async (payload) => {
     const db = await openDB('khm-offline-db', 1, {
@@ -131,6 +137,54 @@ const NewEstimatedBill = () => {
     }
   };
 
+  const handleCustomPdfDownload = async () => {
+    if (items.some(i => !i.product)) return alert("Please select a product for all rows.");
+    if (!formData.customInvoiceNumber) return alert("Please enter an Invoice Number for the Custom PDF.");
+
+    const submissionData = {
+      ...formData,
+      transactionType: 'ESTIMATE',
+      customer: formData.customer,
+      invoiceNumber: formData.customInvoiceNumber,
+      discount: Math.round(parsedDiscount * 100),
+      deliveryCharge: Math.round(parsedDeliveryCharge * 100),
+      items: items.map(i => ({
+        product: i.product,
+        quantity: Number(i.quantity),
+        rate: Math.round(Number(i.rate) * 100),
+        secondaryQty: Number(i.secondaryQty) || 0,
+      }))
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/sales/custom-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(submissionData)
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to generate custom PDF');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Custom_${formData.customInvoiceNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       {isOffline && (
@@ -153,6 +207,12 @@ const NewEstimatedBill = () => {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">New Estimated Bill</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Create a non-GST estimate bill.</p>
         </div>
+        <div className="ml-auto flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            <input type="checkbox" checked={isCustomMode} onChange={(e) => setIsCustomMode(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+            Custom/Draft PDF Mode
+          </label>
+        </div>
       </div>
 
       {error && (
@@ -170,11 +230,17 @@ const NewEstimatedBill = () => {
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Customer *</label>
             <select required value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
               <option value="">Select Customer</option>
-              {customers.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {customers.map(c => <option key={c._id} value={c._id}>{c.name} {c.gstin ? `(GST: ${c.gstin})` : '(B2C)'}</option>)}
             </select>
           </div>
 
           {/* Numbers are generated on the backend (PREFIX-FYMMDD-SEQ) and shown after saving. */}
+          {isCustomMode && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Custom Invoice Number *</label>
+              <input required type="text" value={formData.customInvoiceNumber} onChange={(e) => setFormData({ ...formData, customInvoiceNumber: e.target.value })} placeholder="e.g. EST/26-27/001" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Bill Date *</label>
@@ -268,7 +334,7 @@ const NewEstimatedBill = () => {
                               </label>
 
                               <input
-                                required={selectedProductInfo?.pricingBasis === 'SECONDARY'}
+                                required={false}
                                 type="number"
                                 min="0"
                                 step="any"
@@ -338,6 +404,10 @@ const NewEstimatedBill = () => {
                 <span className="text-sm text-slate-500 dark:text-slate-400">Discount (₹)</span>
                 <input type="number" min="0" step="0.01" value={formData.discount} onChange={(e) => setFormData({ ...formData, discount: e.target.value })} className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded px-2 py-1 text-sm text-right text-slate-900 dark:text-white outline-none font-mono" />
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Delivery Charge (₹)</span>
+                <input type="number" min="0" step="0.01" value={formData.deliveryCharge} onChange={(e) => setFormData({ ...formData, deliveryCharge: e.target.value })} className="w-24 bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded px-2 py-1 text-sm text-right text-slate-900 dark:text-white outline-none font-mono" />
+              </div>
               <div className="h-px w-full bg-slate-200 dark:bg-slate-800 my-2"></div>
               <div className="flex justify-between items-end">
                 <span className="text-base font-bold text-slate-600 dark:text-slate-300">Grand Total</span>
@@ -345,9 +415,15 @@ const NewEstimatedBill = () => {
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-amber-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading ? 'Processing...' : isOffline ? 'Save Offline' : (formData.status === 'COMPLETED' ? 'Save & Generate PDF' : 'Save Estimate')}
-            </button>
+            {!isCustomMode ? (
+              <button type="submit" disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold rounded-2xl shadow-xl shadow-amber-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading ? 'Processing...' : isOffline ? 'Save Offline' : (formData.status === 'COMPLETED' ? 'Save & Generate PDF' : 'Save Estimate')}
+              </button>
+            ) : (
+              <button type="button" onClick={handleCustomPdfDownload} disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-xl shadow-emerald-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                Download Custom PDF
+              </button>
+            )}
           </div>
         </div>
 

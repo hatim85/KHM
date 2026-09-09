@@ -1,5 +1,5 @@
 import express from 'express';
-import { getSales, createSale, convertEstimateToTax, cancelSale, viewSalePdf, downloadSalePdf, publicSalePdf } from '../controllers/salesController.js';
+import { getSales, createSale, convertEstimateToTax, cancelSale, viewSalePdf, downloadSalePdf, publicSalePdf, generateCustomPdf } from '../controllers/salesController.js';
 import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -14,6 +14,7 @@ router.route('/')
   .get(getSales)
   .post(createSale);
 
+router.post('/custom-pdf', generateCustomPdf);
 router.post('/:id/convert', convertEstimateToTax);
 router.post('/:id/cancel', cancelSale);
 

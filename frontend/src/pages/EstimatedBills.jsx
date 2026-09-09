@@ -4,6 +4,7 @@ import { fetchSales, createSale, convertEstimate, cancelSale } from '../features
 import { Link } from 'react-router-dom';
 import { openDB } from 'idb';
 import { PlusIcon } from '../components/icons';
+import { usePopup } from '../context/PopupContext';
 
 const EstimatedBills = () => {
   const dispatch = useDispatch();
@@ -12,6 +13,7 @@ const EstimatedBills = () => {
   const [payFilter, setPayFilter] = useState('');
   const [offlineBills, setOfflineBills] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const { showConfirm, showAlert } = usePopup();
 
   const checkOfflineBills = async () => {
     try {
@@ -36,7 +38,7 @@ const EstimatedBills = () => {
 
   const syncOfflineBills = async () => {
     if (!navigator.onLine) {
-      alert("You are still offline. Please connect to the internet to sync.");
+      await showAlert("You are still offline. Please connect to the internet to sync.");
       return;
     }
     
@@ -59,21 +61,23 @@ const EstimatedBills = () => {
   };
 
   const handleConvert = async (sale) => {
-    if (!window.confirm(`Convert estimate ${sale.invoiceNumber} into a NEW tax invoice? The estimate is preserved; stock is not moved twice.`)) return;
+    const isConfirmed = await showConfirm(`Convert estimate ${sale.invoiceNumber} into a NEW tax invoice? The estimate is preserved; stock is not moved twice.`);
+    if (!isConfirmed) return;
     const result = await dispatch(convertEstimate(sale._id));
     if (!result.error) {
       const split = result.payload?.splitBills || (result.payload?.data ? [result.payload.data] : []);
       if (split.length > 1) {
-        alert(`Converted with GST split:\n• Tax Invoice ${split.find((s) => s.billType !== 'BILL_OF_SUPPLY')?.invoiceNumber}\n• Bill of Supply ${split.find((s) => s.billType === 'BILL_OF_SUPPLY')?.invoiceNumber} (0% GST items)`);
+        await showAlert(`Converted with GST split:\n• Tax Invoice ${split.find((s) => s.billType !== 'BILL_OF_SUPPLY')?.invoiceNumber}\n• Bill of Supply ${split.find((s) => s.billType === 'BILL_OF_SUPPLY')?.invoiceNumber} (0% GST items)`);
       } else {
-        alert(`Converted to ${split[0]?.billType === 'BILL_OF_SUPPLY' ? 'bill of supply' : 'tax invoice'} ${split[0]?.invoiceNumber}`);
+        await showAlert(`Converted to ${split[0]?.billType === 'BILL_OF_SUPPLY' ? 'bill of supply' : 'tax invoice'} ${split[0]?.invoiceNumber}`);
       }
       dispatch(fetchSales({ stream: 'ESTIMATE' }));
     }
   };
 
   const handleCancel = async (sale) => {
-    if (!window.confirm(`Cancel estimate ${sale.invoiceNumber}? Its number is retained and never reused.`)) return;
+    const isConfirmed = await showConfirm(`Cancel estimate ${sale.invoiceNumber}? Its number is retained and never reused.`);
+    if (!isConfirmed) return;
     const result = await dispatch(cancelSale(sale._id));
     if (!result.error) dispatch(fetchSales({ stream: 'ESTIMATE' }));
   };

@@ -4,10 +4,12 @@ import { fetchSales, createSale, cancelSale } from '../features/salesSlice';
 import { Link } from 'react-router-dom';
 import { openDB } from 'idb';
 import { PlusIcon } from '../components/icons';
+import { usePopup } from '../context/PopupContext';
 
 const TaxBills = () => {
   const dispatch = useDispatch();
   const { data: sales, loading, error } = useSelector(state => state.sales);
+  const { showConfirm, showAlert } = usePopup();
   const [statusFilter, setStatusFilter] = useState('');
   const [payFilter, setPayFilter] = useState('');
   const [billTypeFilter, setBillTypeFilter] = useState('');
@@ -39,7 +41,7 @@ const TaxBills = () => {
 
   const syncOfflineBills = async () => {
     if (!navigator.onLine) {
-      alert("You are still offline. Please connect to the internet to sync.");
+      await showAlert("You are still offline. Please connect to the internet to sync.");
       return;
     }
     
@@ -62,10 +64,12 @@ const TaxBills = () => {
 
   const handleCancel = async (sale) => {
     const label = sale.billType === 'BILL_OF_SUPPLY' ? 'bill of supply' : 'tax invoice';
-    if (!window.confirm(`Cancel ${label} ${sale.invoiceNumber}? Its number is retained and never reused. Paid bills must have payments reversed first.`)) return;
+    const isConfirmed = await showConfirm(`Cancel ${label} ${sale.invoiceNumber}? Its number is retained and never reused. Paid bills must have payments reversed first.`);
+    if (!isConfirmed) return;
+    
     const result = await dispatch(cancelSale(sale._id));
     if (result.error) {
-      alert(typeof result.payload === 'string' ? result.payload : 'Cancellation failed.');
+      await showAlert(typeof result.payload === 'string' ? result.payload : 'Cancellation failed.');
     } else {
       const filters = { stream: 'TAX' };
       if (statusFilter) filters.status = statusFilter;

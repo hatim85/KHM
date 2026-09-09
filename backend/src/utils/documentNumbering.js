@@ -5,12 +5,11 @@ import ApiError from './ApiError.js';
 /**
  * Production document numbering.
  *
- * FINAL FORMAT:  PREFIX-FYMMDD-SEQUENCE
- *   e.g. INV-26270906-001
- *     INV      = document-type series prefix
- *     2627     = Indian financial year 2026-27 (last 2 digits of start + end)
- *     0906     = document date in the business timezone (MMDD)
- *     001      = per-day sequence for that type + FY + date + series (001–999)
+ * FINAL FORMAT:  PREFIX/FY/SEQUENCE
+ *   e.g. INV/26-27/00001
+ *     INV      = document-type prefix
+ *     26-27    = Indian financial year
+ *     00001    = per-FY sequence for that type (00001–99999)
  *
  * Rules enforced here:
  * - Indian FY (1 Apr – 31 Mar), derived from the DOCUMENT date in the
@@ -26,7 +25,7 @@ import ApiError from './ApiError.js';
  */
 
 export const DEFAULT_TIMEZONE = 'Asia/Kolkata';
-export const MAX_DAILY_SEQUENCE = 999;
+export const MAX_YEARLY_SEQUENCE = 99999;
 
 /** Business-calendar parts of a date in a given IANA timezone. */
 export const getBusinessDateParts = (date = new Date(), timezone = DEFAULT_TIMEZONE) => {
@@ -55,10 +54,10 @@ export const getFinancialYearStart = (dateOrYear = new Date(), timezone = DEFAUL
   return m >= 4 ? y : y - 1;
 };
 
-/** FY code embedded in numbers: FY 2026-27 => "2627". */
+/** FY code embedded in numbers: FY 2026-27 => "26-27". */
 export const getFinancialYearCode = (fyStart) => {
   const s = Number(fyStart);
-  return `${String(s).slice(-2)}${String(s + 1).slice(-2)}`;
+  return `${String(s).slice(-2)}-${String(s + 1).slice(-2)}`;
 };
 
 export const getFinancialYearLabel = (fyStart) => `${fyStart}-${String(Number(fyStart) + 1).slice(-2)}`;
@@ -82,11 +81,13 @@ export const DOCUMENT_TYPES = Object.freeze({
   PAYMENT: { prefixField: 'paymentPrefix', defaultPrefix: 'PAY-', label: 'Payment Voucher' },
 });
 
-export const formatDocumentNumber = (prefix, fyCode, mmdd, seq) =>
-  `${prefix}${fyCode}${mmdd}-${String(seq).padStart(3, '0')}`;
+export const formatDocumentNumber = (prefix, fyCode, seq) => {
+  let cleanedPrefix = prefix.endsWith('-') ? prefix.slice(0, -1) : prefix;
+  return `${cleanedPrefix}/${fyCode}/${String(seq).padStart(5, '0')}`;
+}
 
-/** Matches the production format: PREFIX-FYMMDD-SEQ (e.g. INV-26270906-001). */
-const NEW_NUMBER_REGEX = /^[A-Z]{2,5}-\d{8}-\d{3}$/;
+/** Matches the production format: PREFIX/FY/SEQ (e.g. INV/26-27/00001). */
+const NEW_NUMBER_REGEX = /^[A-Z]{2,5}\/\d{2}-\d{2}\/\d{5}$/;
 
 export const isNewDocumentNumber = (value) => {
   if (!value) return false;
@@ -147,32 +148,32 @@ export const getNextDocumentNumber = async (docType, refDate = new Date(), opts 
   const dateKey = getDateKey(y, m, d);
   const mmdd = getMMDD(m, d);
 
-  const key = `${docType}:${prefix}:${fyCode}:${dateKey}`;
+  const key = `${docType}:${prefix}:${fyCode}`; // per financial year, not per day
   const counter = await DocumentCounter.findOneAndUpdate(
     { _id: key },
     { $inc: { seq: 1 } },
     { returnDocument: 'after', upsert: true },
   );
   const seq = counter.seq;
-  if (seq > MAX_DAILY_SEQUENCE) {
+  if (seq > MAX_YEARLY_SEQUENCE) {
     throw new ApiError(
       409,
-      `Daily sequence exhausted for ${prefix} on ${getFinancialYearLabel(fy)} ${mmdd} (${MAX_DAILY_SEQUENCE} documents already issued). ` +
+      `Yearly sequence exhausted for ${prefix} on ${getFinancialYearLabel(fy)} (${MAX_YEARLY_SEQUENCE} documents already issued). ` +
       `Ask an administrator to configure another series (prefix) for continued billing — numbers are never reused.`,
     );
   }
   return {
-    number: formatDocumentNumber(prefix, fyCode, mmdd, seq),
-    prefix, fy, fyCode, fyLabel: getFinancialYearLabel(fy), dateKey, mmdd, seq,
+    number: formatDocumentNumber(prefix, fyCode, seq),
+    prefix, fy, fyCode, fyLabel: getFinancialYearLabel(fy), seq,
     documentDate: businessDate,
     timezone,
   };
 };
 
 /** Read the would-be next sequence for a type+date WITHOUT consuming it. */
-export const peekNextSequence = async (docType, prefix, fyCode, dateKey) => {
+export const peekNextSequence = async (docType, prefix, fyCode) => {
   const counter = await DocumentCounter.findOne({
-    _id: `${docType}:${prefix}:${fyCode}:${dateKey}`,
+    _id: `${docType}:${prefix}:${fyCode}`,
   }).lean();
   return (counter?.seq || 0) + 1;
 };
@@ -207,14 +208,14 @@ export const previewAllSequences = async (settings, refDate = new Date()) => {
   const out = {};
   for (const [key, config] of Object.entries(DOCUMENT_TYPES)) {
     const base = previewNextDocumentNumber(settings, key, refDate);
-    const nextSeq = await peekNextSequence(key, base.prefix, base.fyCode, base.dateKey);
+    const nextSeq = await peekNextSequence(key, base.prefix, base.fyCode);
     out[key] = {
       ...base,
       nextSeq,
-      exhausted: nextSeq > MAX_DAILY_SEQUENCE,
-      preview: nextSeq > MAX_DAILY_SEQUENCE
+      exhausted: nextSeq > MAX_YEARLY_SEQUENCE,
+      preview: nextSeq > MAX_YEARLY_SEQUENCE
         ? null
-        : formatDocumentNumber(base.prefix, base.fyCode, base.mmdd, nextSeq),
+        : formatDocumentNumber(base.prefix, base.fyCode, nextSeq),
     };
   }
   return out;
