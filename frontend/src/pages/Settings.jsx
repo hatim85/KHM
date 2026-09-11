@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchSettings, fetchSequencePreview, updateBusinessSettings, updateSequenceSettings, clearSettingsError, resetUpdateSuccess, triggerBackup, clearBackupResult } from '../features/settingsSlice';
 import { GST_STATES } from '../utils/gstStates';
 import { AlertTriangleIcon, CheckIcon, CloudUploadIcon, XIcon } from '../components/icons';
+import UserManagement from '../components/UserManagement';
 
 // Backend document-type keys (PREFIX-FYMMDD-SEQ, per-day 001–999 series).
 const SEQUENCE_ROWS = [
@@ -419,6 +420,9 @@ const Settings = () => {
           </div>
         </div>
       )}
+
+      {/* User Management Section (Admin Only) */}
+      <UserManagement />
     </div>
   );
 };

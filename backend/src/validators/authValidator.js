@@ -43,7 +43,42 @@ const registerValidator = [
   handleValidationErrors,
 ];
 
-export { loginValidator,
+const forgotPasswordValidator = [
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email is required')
+    .isEmail().withMessage('Please enter a valid email'),
+  handleValidationErrors,
+];
+
+const verifyOtpValidator = [
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email is required')
+    .isEmail().withMessage('Please enter a valid email'),
+  body('otp')
+    .trim()
+    .notEmpty().withMessage('OTP is required')
+    .isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+    .isNumeric().withMessage('OTP must contain only digits'),
+  handleValidationErrors,
+];
+
+const resetPasswordValidator = [
+  body('resetToken')
+    .notEmpty().withMessage('Reset token is required'),
+  body('newPassword')
+    .notEmpty().withMessage('New password is required')
+    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  handleValidationErrors,
+];
+
+export {
+  loginValidator,
   registerValidator,
   handleValidationErrors,
- };
+  forgotPasswordValidator,
+  verifyOtpValidator,
+  resetPasswordValidator,
+};
+

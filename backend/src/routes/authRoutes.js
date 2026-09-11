@@ -1,17 +1,49 @@
 import express from 'express';
 const router = express.Router();
-import { loginUser, registerUser, logoutUser, getMe  } from '../controllers/authController.js';
-import { protect, authorize  } from '../middlewares/authMiddleware.js';
-import { loginValidator, registerValidator  } from '../validators/authValidator.js';
+import {
+  loginUser,
+  registerUser,
+  logoutUser,
+  getMe,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
+  getUsers,
+  updateUser,
+  toggleUserActive,
+} from '../controllers/authController.js';
+import { protect } from '../middlewares/authMiddleware.js';
+import ApiError from '../utils/ApiError.js';
+import {
+  loginValidator,
+  registerValidator,
+  forgotPasswordValidator,
+  verifyOtpValidator,
+  resetPasswordValidator,
+} from '../validators/authValidator.js';
+
+// Admin only middleware
+const adminOnly = (req, res, next) => {
+  if (req.user?.role !== 'Admin') {
+    return next(new ApiError(403, 'Access denied. Only Admins can perform this action.', 'ADMIN_ONLY'));
+  }
+  next();
+};
 
 // Public routes
 router.post('/login', loginValidator, loginUser);
+router.post('/forgot-password', forgotPasswordValidator, forgotPassword);
+router.post('/verify-otp', verifyOtpValidator, verifyOtp);
+router.post('/reset-password', resetPasswordValidator, resetPassword);
 
 // Protected routes
 router.post('/logout', protect, logoutUser);
 router.get('/me', protect, getMe);
 
-// Admin-only routes
-router.post('/register', protect, authorize('users.manage'), registerValidator, registerUser);
+// Admin-only user management routes
+router.post('/register', protect, adminOnly, registerValidator, registerUser);
+router.get('/users', protect, adminOnly, getUsers);
+router.put('/users/:id', protect, adminOnly, updateUser);
+router.patch('/users/:id/toggle-active', protect, adminOnly, toggleUserActive);
 
 export default router;

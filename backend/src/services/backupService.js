@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 
 // Constants
 const BACKUP_DIR = path.join(__dirname, '../../backups');
-const RETENTION_DAYS = 7;
+const RETENTION_DAYS = 3;
 
 /**
  * Create a raw OAuth2 client (no credentials set yet).

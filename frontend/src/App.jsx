@@ -6,6 +6,7 @@ import { fetchCurrentUser } from './features/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Customers from './pages/Customers';
@@ -42,8 +43,9 @@ function App() {
     <PopupProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Login Route */}
+          {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* Protected ERP Routes */}
           <Route

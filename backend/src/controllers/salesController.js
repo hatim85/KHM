@@ -860,8 +860,46 @@ export const generateCustomPdf = async (req, res, next) => {
     const parsedDiscount = Number(discount) || 0;
     const parsedDeliveryCharge = Number(deliveryCharge) || 0;
 
+    // Classify items by GST rate for TAX bills to support Bill of Supply (0% exempt items)
+    let targetLines = items || [];
+    let resolvedBillType = billType;
+
+    if (transactionType === 'TAX') {
+      const rateCache = new Map();
+      const exemptLines = [];
+      const taxableLines = [];
+
+      for (const item of targetLines) {
+        let gstRate = rateCache.get(String(item.product));
+        if (gstRate === undefined) {
+          const product = await Product.findById(item.product).select('gstRate');
+          gstRate = product ? (Number(product.gstRate) || 0) : 0;
+          rateCache.set(String(item.product), gstRate);
+        }
+        if (gstRate === 0) exemptLines.push(item);
+        else taxableLines.push(item);
+      }
+
+      if (!resolvedBillType) {
+        if (exemptLines.length > 0 && taxableLines.length === 0) {
+          resolvedBillType = 'BILL_OF_SUPPLY';
+        } else {
+          resolvedBillType = 'TAX_INVOICE';
+        }
+      }
+
+      // If mixed items, select appropriate partition based on resolvedBillType
+      if (resolvedBillType === 'BILL_OF_SUPPLY' && exemptLines.length > 0 && taxableLines.length > 0) {
+        targetLines = exemptLines;
+      } else if (resolvedBillType === 'TAX_INVOICE' && exemptLines.length > 0 && taxableLines.length > 0) {
+        targetLines = taxableLines;
+      }
+    } else {
+      resolvedBillType = 'TAX_INVOICE';
+    }
+
     const { processedItems, subTotal, totalCgst, totalSgst, totalIgst, partitionDiscount, partitionDeliveryCharge } = await buildPartitionTotals({
-      lines: items,
+      lines: targetLines,
       transactionType,
       isIntraState,
       session: null,
@@ -873,7 +911,7 @@ export const generateCustomPdf = async (req, res, next) => {
 
     const dummySale = {
       transactionType,
-      billType: billType || 'TAX_INVOICE',
+      billType: resolvedBillType,
       invoiceNumber,
       invoiceDate: invoiceDate ? new Date(invoiceDate) : new Date(),
       items: processedItems,
@@ -905,8 +943,8 @@ export const generateCustomPdf = async (req, res, next) => {
 
     const htmlContent = generateHTML(dummySale, settings, null); // null for QR code
     const pdfBuffer = await renderPdfBuffer(htmlContent);
-
-    const safeFilename = `Custom_${invoiceNumber.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`;
+    const filePrefix = resolvedBillType === 'BILL_OF_SUPPLY' ? 'BillOfSupply' : (transactionType === 'ESTIMATE' ? 'Estimate' : 'TaxInvoice');
+    const safeFilename = `${filePrefix}_${invoiceNumber.replace(/[^a-zA-Z0-9-]/g, '_')}.pdf`;
     
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);

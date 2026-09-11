@@ -31,6 +31,7 @@ const NewTaxBill = () => {
   });
 
   const [isCustomMode, setIsCustomMode] = useState(false);
+  const [customBillType, setCustomBillType] = useState('TAX_INVOICE');
 
   const [items, setItems] = useState([
     { product: '', quantity: 1, rate: 0, gstRate: 0, secondaryQty: 0 }
@@ -158,6 +159,8 @@ const NewTaxBill = () => {
   const taxableCount = chosenLines.filter(i => gstRateOf(i) !== 0).length;
   const willSplit = exemptCount > 0 && taxableCount > 0;
   const willBeSupplyOnly = chosenLines.length > 0 && taxableCount === 0;
+  const isCustomBOS = isCustomMode && (willBeSupplyOnly || (willSplit && customBillType === 'BILL_OF_SUPPLY'));
+  const effectiveCustomBillType = willBeSupplyOnly ? 'BILL_OF_SUPPLY' : (willSplit ? customBillType : 'TAX_INVOICE');
 
   const saveToIndexedDB = async (payload) => {
     const db = await openDB('khm-offline-db', 1, {
@@ -179,6 +182,7 @@ const NewTaxBill = () => {
     const submissionData = {
       ...formData,
       discount: Math.round(parsedDiscount * 100),
+      deliveryCharge: Math.round(parsedDeliveryCharge * 100),
       items: items.map(i => ({
         product: i.product,
         quantity: Number(i.quantity),
@@ -213,6 +217,7 @@ const NewTaxBill = () => {
     const submissionData = {
       ...formData,
       transactionType: 'TAX',
+      billType: effectiveCustomBillType,
       customer: formData.customer,
       invoiceNumber: formData.customInvoiceNumber,
       discount: Math.round(parsedDiscount * 100),
@@ -244,7 +249,8 @@ const NewTaxBill = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Custom_${formData.customInvoiceNumber}.pdf`;
+      const filePrefix = effectiveCustomBillType === 'BILL_OF_SUPPLY' ? 'BillOfSupply' : 'TaxInvoice';
+      a.download = `${filePrefix}_${formData.customInvoiceNumber}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -313,8 +319,17 @@ const NewTaxBill = () => {
           {/* Numbers are generated on the backend (PREFIX-FYMMDD-SEQ) and shown after saving. */}
           {isCustomMode && (
             <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Custom Invoice Number *</label>
-              <input required type="text" value={formData.customInvoiceNumber} onChange={(e) => setFormData({ ...formData, customInvoiceNumber: e.target.value })} placeholder="e.g. INV/26-27/001" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                {isCustomBOS ? 'Custom Bill of Supply Number *' : 'Custom Invoice Number *'}
+              </label>
+              <input
+                required
+                type="text"
+                value={formData.customInvoiceNumber}
+                onChange={(e) => setFormData({ ...formData, customInvoiceNumber: e.target.value })}
+                placeholder={isCustomBOS ? "e.g. BOS/26-27/001" : "e.g. INV/26-27/001"}
+                className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none"
+              />
             </div>
           )}
 
@@ -335,14 +350,42 @@ const NewTaxBill = () => {
 
         {/* GST split preview: 0%-GST lines become a Bill of Supply */}
         {willSplit && (
-          <div className="bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-2xl flex items-start gap-3">
-            <AlertTriangleIcon size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">Mixed GST bill — will be split into 2 documents</h3>
-              <p className="text-emerald-600/90 dark:text-emerald-300/80 text-xs mt-1">
-                {taxableCount} GST item(s) → Tax Invoice (INV-…) &nbsp;+&nbsp; {exemptCount} exempt 0%-GST item(s) → Bill of Supply (BOS-…, with the Notification No. 12/2017 exemption note).
-              </p>
+          <div className="bg-emerald-500/10 border border-emerald-500/40 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangleIcon size={18} className="text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">Mixed GST bill — will be split into 2 documents</h3>
+                <p className="text-emerald-600/90 dark:text-emerald-300/80 text-xs mt-1">
+                  {taxableCount} GST item(s) → Tax Invoice (INV-…) &nbsp;+&nbsp; {exemptCount} exempt 0%-GST item(s) → Bill of Supply (BOS-…, with the Notification No. 12/2017 exemption note).
+                </p>
+              </div>
             </div>
+            {isCustomMode && (
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCustomBillType('TAX_INVOICE')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition border ${
+                    customBillType === 'TAX_INVOICE'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  Tax Invoice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomBillType('BILL_OF_SUPPLY')}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition border ${
+                    customBillType === 'BILL_OF_SUPPLY'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20'
+                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  Bill of Supply
+                </button>
+              </div>
+            )}
           </div>
         )}
         {willBeSupplyOnly && (
@@ -578,8 +621,17 @@ const NewTaxBill = () => {
                 {loading ? 'Processing...' : isOffline ? 'Save Offline' : (formData.status === 'COMPLETED' ? 'Save & Generate GST PDF' : 'Save Draft')}
               </button>
             ) : (
-              <button type="button" onClick={handleCustomPdfDownload} disabled={loading} className="w-full mt-8 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-xl shadow-emerald-600/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
-                Download Custom PDF
+              <button
+                type="button"
+                onClick={handleCustomPdfDownload}
+                disabled={loading}
+                className={`w-full mt-8 px-6 py-4 bg-gradient-to-r ${
+                  isCustomBOS
+                    ? 'from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/20'
+                    : 'from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 shadow-indigo-600/20'
+                } text-white font-bold rounded-2xl shadow-xl active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2`}
+              >
+                {isCustomBOS ? 'Download Bill of Supply PDF' : 'Download Custom Tax Invoice PDF'}
               </button>
             )}
           </div>

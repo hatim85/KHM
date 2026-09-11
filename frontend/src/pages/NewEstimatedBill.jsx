@@ -119,6 +119,7 @@ const NewEstimatedBill = () => {
     const submissionData = {
       ...formData,
       discount: Math.round(parsedDiscount * 100),
+      deliveryCharge: Math.round(parsedDeliveryCharge * 100),
       items: items.map(i => ({
         product: i.product,
         quantity: Number(i.quantity),

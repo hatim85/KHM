@@ -553,7 +553,7 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
               <th style="width: 30%">Item</th>
               <th style="width: 18%">Specification</th>
               <th style="width: 10%" class="text-center">Qty</th>
-              <th style="width: 18%" class="text-right">Unit Rate</th>
+              <th style="width: 18%" class="text-right">Rate</th>
               <th style="width: 19%" class="text-right">Total Amount</th>
             </tr>
             ` : isBillOfSupply ? `
