@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPurchase } from '../features/purchaseSlice';
 import { supplierThunks, productThunks } from '../features/masterDataSlice';
 import { ArrowLeftIcon, XIcon, PlusIcon, CheckIcon, PencilIcon } from '../components/icons';
+import SearchableSelect from '../components/SearchableSelect';
 
 const PurchaseForm = () => {
   const dispatch = useDispatch();
@@ -156,10 +157,13 @@ const PurchaseForm = () => {
 
           <div className="md:col-span-1">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Supplier *</label>
-            <select required value={formData.supplier} onChange={(e) => setFormData({ ...formData, supplier: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-              <option value="">Select Supplier</option>
-              {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-            </select>
+            <SearchableSelect
+              required
+              value={formData.supplier}
+              onChange={(val) => setFormData({ ...formData, supplier: val })}
+              placeholder="Search Supplier..."
+              options={suppliers.map(s => ({ value: s._id, label: s.name }))}
+            />
           </div>
 
           <div className="md:col-span-1">
@@ -199,10 +203,13 @@ const PurchaseForm = () => {
                   <tr key={index} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition group">
                     <td className="py-3 px-6 text-sm text-slate-500 font-mono">{index + 1}</td>
                     <td className="py-3 px-6">
-                      <select required value={item.product} onChange={(e) => handleProductSelect(index, e.target.value)} className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                        <option value="">Search Product...</option>
-                        {availableProducts(index).map(p => <option key={p._id} value={p._id}>{p.name} {p.sku ? `(${p.sku})` : ''}</option>)}
-                      </select>
+                      <SearchableSelect
+                        required
+                        value={item.product}
+                        onChange={(val) => handleProductSelect(index, val)}
+                        placeholder="Search Product..."
+                        options={availableProducts(index).map(p => ({ value: p._id, label: `${p.name} ${p.sku ? `(${p.sku})` : ''}` }))}
+                      />
                     </td>
                     <td className="py-3 px-6 text-sm text-slate-500 dark:text-slate-400">
                       {(() => {

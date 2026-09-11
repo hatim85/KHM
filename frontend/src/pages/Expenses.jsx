@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchExpenses, fetchExpenseCategories, createExpense, deleteExpenseCategory, deleteExpense, createExpenseCategory } from '../features/expenseSlice';
 import { formatMoney } from '../utils/formatters';
 import { SettingsIcon, PlusIcon, XIcon } from '../components/icons';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Expenses = () => {
   const dispatch = useDispatch();
@@ -159,10 +160,13 @@ const Expenses = () => {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Expense Category *</label>
-                  <select required value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                    <option value="">Select Category</option>
-                    {activeCategories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    required
+                    value={expenseForm.category}
+                    onChange={(val) => setExpenseForm({ ...expenseForm, category: val })}
+                    placeholder="Search Category..."
+                    options={activeCategories.map(c => ({ value: c._id, label: c.name }))}
+                  />
                   {activeCategories.length === 0 && <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">No categories exist. Create one first.</p>}
                 </div>
                 <div>

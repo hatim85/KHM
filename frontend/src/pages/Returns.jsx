@@ -5,6 +5,7 @@ import { fetchReturns, fetchReturnable, createSalesReturn, createPurchaseReturn 
 import { PlusIcon, XIcon } from '../components/icons';
 import { fetchSales } from '../features/salesSlice';
 import { fetchPurchases } from '../features/purchaseSlice';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Returns = () => {
   const dispatch = useDispatch();
@@ -180,14 +181,13 @@ const Returns = () => {
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Original Document (Completed only) *</label>
-                <select required value={originalId} onChange={(e) => setOriginalId(e.target.value)} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                  <option value="">Select document</option>
-                  {originals.map((d) => (
-                    <option key={d._id} value={d._id}>
-                      {d.invoiceNumber} — {(d.customerSnapshot?.name || d.supplierSnapshot?.name || d.customer?.name || d.supplier?.name || '')} — ₹{(d.grandTotal / 100).toFixed(2)}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  required
+                  value={originalId}
+                  onChange={(val) => setOriginalId(val)}
+                  placeholder="Search document..."
+                  options={originals.map((d) => ({ value: d._id, label: `${d.invoiceNumber} — ${(d.customerSnapshot?.name || d.supplierSnapshot?.name || d.customer?.name || d.supplier?.name || '')} — ₹${(d.grandTotal / 100).toFixed(2)}` }))}
+                />
               </div>
 
               {returnable && (

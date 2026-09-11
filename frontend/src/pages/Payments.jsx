@@ -4,6 +4,7 @@ import { fetchPayments, createPayment, reversePayment, clearPaymentError, fetchU
 import { customerThunks, supplierThunks } from '../features/masterDataSlice';
 import { formatMoney } from '../utils/formatters';
 import { PlusIcon, XIcon, UndoIcon } from '../components/icons';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Payments = () => {
   const dispatch = useDispatch();
@@ -270,26 +271,19 @@ const Payments = () => {
                       {partyType}
                     </label>
 
-                    <select
+                    <SearchableSelect
                       required
                       value={formData.partyId}
-                      onChange={(e) => {
+                      onChange={(val) => {
                         setFormData({
                           ...formData,
-                          partyId: e.target.value
+                          partyId: val
                         });
                         setAllocations({});
                       }}
-                      className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none"
-                    >
-                      <option value="">Select {partyType}</option>
-
-                      {partyList.map(p => (
-                        <option key={p._id} value={p._id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={`Search ${partyType}...`}
+                      options={partyList.map(p => ({ value: p._id, label: p.name }))}
+                    />
                   </div>
                 </div>
 

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createNote, fetchNoteOriginals, clearOriginals } from '../features/notesSlice';
 import { customerThunks, supplierThunks, productThunks } from '../features/masterDataSlice';
 import { ArrowLeftIcon, XIcon, PlusIcon } from '../components/icons';
+import SearchableSelect from '../components/SearchableSelect';
 
 const NewNote = () => {
   const dispatch = useDispatch();
@@ -128,10 +129,13 @@ const NewNote = () => {
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">{isCredit ? 'Customer *' : 'Supplier *'}</label>
-            <select required value={partyId} onChange={(e) => { setPartyId(e.target.value); setOriginalId(''); }} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-              <option value="">Select {isCredit ? 'Customer' : 'Supplier'}</option>
-              {parties.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect
+              required
+              value={partyId}
+              onChange={(val) => { setPartyId(val); setOriginalId(''); }}
+              placeholder={`Search ${isCredit ? 'Customer' : 'Supplier'}...`}
+              options={parties.map((p) => ({ value: p._id, label: p.name }))}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Note Date *</label>
@@ -139,14 +143,14 @@ const NewNote = () => {
           </div>
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Original {isCredit ? 'Invoice' : 'Purchase'} *</label>
-            <select required value={originalId} onChange={(e) => setOriginalId(e.target.value)} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none font-mono">
-              <option value="">{partyId ? 'Select original document' : 'Select a party first'}</option>
-              {originals.map((o) => (
-                <option key={o._id} value={o._id}>
-                  {o.invoiceNumber} — ₹{(o.grandTotal / 100).toFixed(2)} (outstanding ₹{(o.outstanding / 100).toFixed(2)})
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              required
+              value={originalId}
+              onChange={(val) => setOriginalId(val)}
+              placeholder={partyId ? 'Search original document...' : 'Select a party first'}
+              disabled={!partyId}
+              options={originals.map((o) => ({ value: o._id, label: `${o.invoiceNumber} — ₹${(o.grandTotal / 100).toFixed(2)} (outstanding ₹${(o.outstanding / 100).toFixed(2)})` }))}
+            />
             {selectedOriginal && (
               <p className="text-[11px] text-slate-500 mt-1">Note value cannot exceed outstanding ₹{(selectedOriginal.outstanding / 100).toFixed(2)}.</p>
             )}
@@ -182,10 +186,12 @@ const NewNote = () => {
                       <input required type="text" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} placeholder="e.g. Goods returned — damaged" className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none" />
                     </td>
                     <td className="py-3 px-4">
-                      <select value={item.product} onChange={(e) => handleItemChange(index, 'product', e.target.value)} className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                        <option value="">Free-form (no product)</option>
-                        {products.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-                      </select>
+                      <SearchableSelect
+                        value={item.product}
+                        onChange={(val) => handleItemChange(index, 'product', val)}
+                        placeholder="Free-form (no product)"
+                        options={products.map((p) => ({ value: p._id, label: p.name }))}
+                      />
                       {item.product && <p className="text-[10px] text-slate-500 mt-1">Rate + GST mirror the original line.</p>}
                     </td>
                     <td className="py-3 px-4">

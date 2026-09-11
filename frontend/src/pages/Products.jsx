@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { ClipboardListIcon, TagIcon, AlertTriangleIcon, CheckIcon, PlusIcon, XIcon } from '../components/icons';
 import { productThunks, categoryThunks, brandThunks, unitThunks } from '../features/masterDataSlice';
 import { adjustStock, resetAdjustSuccess, fetchLowStock } from '../features/inventorySlice';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Products = () => {
   const dispatch = useDispatch();
@@ -313,35 +314,44 @@ const Products = () => {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Category</label>
-                  <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                    <option value="">Select Category</option>
-                    {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={formData.category}
+                    onChange={(val) => setFormData({...formData, category: val})}
+                    placeholder="Search Category..."
+                    options={categories.map(c => ({ value: c._id, label: c.name }))}
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Brand</label>
-                  <select value={formData.brand} onChange={(e) => setFormData({...formData, brand: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                    <option value="">Select Brand</option>
-                    {brands.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={formData.brand}
+                    onChange={(val) => setFormData({...formData, brand: val})}
+                    placeholder="Search Brand..."
+                    options={brands.map(b => ({ value: b._id, label: b.name }))}
+                  />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Unit *</label>
-                  <select required value={formData.unit} onChange={(e) => setFormData({...formData, unit: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                    <option value="">Select Unit</option>
-                    {units.map(u => <option key={u._id} value={u._id}>{u.name} ({u.shortName})</option>)}
-                  </select>
+                  <SearchableSelect
+                    required
+                    value={formData.unit}
+                    onChange={(val) => setFormData({...formData, unit: val})}
+                    placeholder="Search Unit..."
+                    options={units.map(u => ({ value: u._id, label: `${u.name} (${u.shortName})` }))}
+                  />
                   <p className="text-[10px] text-slate-500 mt-1">Primary / billing unit. Stock is counted in this unit.</p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Secondary Unit (optional)</label>
-                  <select value={formData.secondaryUnit} onChange={(e) => setFormData({...formData, secondaryUnit: e.target.value, pricingBasis: e.target.value ? formData.pricingBasis : 'PRIMARY'})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                    <option value="">None</option>
-                    {units.filter(u => u._id !== formData.unit).map(u => <option key={u._id} value={u._id}>{u.name} ({u.shortName})</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={formData.secondaryUnit}
+                    onChange={(val) => setFormData({...formData, secondaryUnit: val, pricingBasis: val ? formData.pricingBasis : 'PRIMARY'})}
+                    placeholder="None"
+                    options={units.filter(u => u._id !== formData.unit).map(u => ({ value: u._id, label: `${u.name} (${u.shortName})` }))}
+                  />
                   <p className="text-[10px] text-slate-500 mt-1">Measured unit (e.g. KG). Actual qty recorded per bill — no fixed conversion.</p>
                 </div>
 

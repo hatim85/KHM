@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { createSale } from '../features/salesSlice';
@@ -6,6 +6,7 @@ import { customerThunks, productThunks } from '../features/masterDataSlice';
 import { fetchSettings } from '../features/settingsSlice';
 import { openDB } from 'idb';
 import { AlertTriangleIcon, ArrowLeftIcon, XIcon, PlusIcon } from '../components/icons';
+import SearchableSelect from '../components/SearchableSelect';
 
 const NewTaxBill = () => {
   const dispatch = useDispatch();
@@ -191,6 +192,7 @@ const NewTaxBill = () => {
       return;
     }
 
+    const result = await dispatch(createSale(submissionData));
     if (!result.error) {
       const split = result.payload?.splitBills || (result.payload?.data ? [result.payload.data] : []);
       if (split.length > 1) {
@@ -294,10 +296,13 @@ const NewTaxBill = () => {
           <div className="absolute top-0 right-0 w-32 h-32 blur-3xl -z-10 opacity-30 bg-indigo-500"></div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Customer *</label>
-            <select required value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-              <option value="">Select Customer</option>
-              {customers.map(c => <option key={c._id} value={c._id}>{c.name} {c.gstin ? `(GST: ${c.gstin})` : '(B2C)'}</option>)}
-            </select>
+            <SearchableSelect
+              required
+              value={formData.customer}
+              onChange={(val) => setFormData({ ...formData, customer: val })}
+              placeholder="Search Customer..."
+              options={customers.map(c => ({ value: c._id, label: `${c.name} ${c.gstin ? `(GST: ${c.gstin})` : '(B2C)'}` }))}
+            />
             {selectedCustomer && (
               <p className="text-[10px] text-slate-500 mt-1">
                 State Code: {customerStateCode} ({isIntraState ? 'Intra-State: CGST/SGST' : 'Inter-State: IGST'})
@@ -386,10 +391,13 @@ const NewTaxBill = () => {
                     <tr key={index} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition group">
                       <td className="py-3 px-4 text-sm text-slate-500 font-mono">{index + 1}</td>
                       <td className="py-3 px-4">
-                        <select required value={item.product} onChange={(e) => handleProductSelect(index, e.target.value)} className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
-                          <option value="">Search Product...</option>
-                          {availableProducts(index).map(p => <option key={p._id} value={p._id}>{p.name} {p.hsnCode ? `(${p.hsnCode})` : ''}</option>)}
-                        </select>
+                        <SearchableSelect
+                          required
+                          value={item.product}
+                          onChange={(val) => handleProductSelect(index, val)}
+                          placeholder="Search Product..."
+                          options={availableProducts(index).map(p => ({ value: p._id, label: `${p.name} ${p.hsnCode ? `(${p.hsnCode})` : ''}` }))}
+                        />
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`text-xs font-bold font-mono px-2 py-1 rounded`}>
