@@ -128,7 +128,7 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
   const formatMoney = (paise) => (paise / 100).toFixed(2);
   const isEstimate = sale.transactionType === 'ESTIMATE';
   const isBillOfSupply = !isEstimate && sale.billType === 'BILL_OF_SUPPLY';
-  const title = isEstimate ? 'ESTIMATE' : isBillOfSupply ? 'BILL OF SUPPLY' : 'TAX INVOICE';
+  const title = isEstimate ? 'INVOICE' : isBillOfSupply ? 'BILL OF SUPPLY' : 'TAX INVOICE';
   const accent = isEstimate ? '#ea580c' : isBillOfSupply ? '#059669' : '#2563eb';
   const accentLight = isEstimate ? '#fff7ed' : isBillOfSupply ? '#ecfdf5' : '#eff6ff';
   const accentBorder = isEstimate ? '#fdba74' : isBillOfSupply ? '#6ee7b7' : '#93c5fd';
