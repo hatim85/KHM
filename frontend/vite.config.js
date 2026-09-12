@@ -23,11 +23,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: 'https://khm-erp.duckdns.org',
         changeOrigin: true,
       },
       '/pdfs': {
-        target: 'http://localhost:5001',
+        target: 'https://khm-erp.duckdns.org',
         changeOrigin: true,
       }
     },
