@@ -42,7 +42,7 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
   const fileName = `invoices/${saleData.transactionType}/${saleData.invoiceNumber}_${Date.now()}.pdf`;
 
   // Public URL for QR Code points to KHM backend public endpoint
-  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const baseUrl = process.env.FRONTEND_URL;
   const publicUrl = `${baseUrl}/api/sales/${saleData._id}/pdf/public`;
 
   // Generate QR Code data URI
