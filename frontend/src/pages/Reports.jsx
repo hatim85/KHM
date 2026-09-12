@@ -70,7 +70,7 @@ const Reports = () => {
     return (
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[650px]">
             <thead className="bg-slate-100 dark:bg-slate-800/40">
               <tr className="border-b border-slate-200 dark:border-slate-800">
                 {columns.map((col, i) => (
@@ -100,25 +100,25 @@ const Reports = () => {
 
   const renderOverview = () => {
     const netSales = pnlRes?.data?.netSales || 0;
-    const estSales = estimatesRes?.data?.reduce((acc, curr) => acc + curr.grandTotal, 0) || 0; // simplistic client-side aggregate for overview if needed, or better wait for summary endpoint. Since we only fetched records, let's use what we have or show loading.
+    const estSales = estimatesRes?.data?.reduce((acc, curr) => acc + curr.grandTotal, 0) || 0;
     
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
           <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Net Sales (TAX)</h3>
-          <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400 font-mono">{formatMoney(netSales)}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-indigo-600 dark:text-indigo-400 font-mono">{formatMoney(netSales)}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
           <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Estimate Sales</h3>
-          <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{(estimatesLoading || pnlLoading) ? '...' : formatMoney(estSales)}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{(estimatesLoading || pnlLoading) ? '...' : formatMoney(estSales)}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
           <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Operating Expenses</h3>
-          <p className="text-3xl font-bold text-rose-600 dark:text-rose-400 font-mono">{formatMoney(pnlRes?.data?.totalExpenses || 0)}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-rose-600 dark:text-rose-400 font-mono">{formatMoney(pnlRes?.data?.totalExpenses || 0)}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
           <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Net Profit (TAX)</h3>
-          <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatMoney(pnlRes?.data?.netProfit || 0)}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{formatMoney(pnlRes?.data?.netProfit || 0)}</p>
         </div>
       </div>
     );
@@ -210,27 +210,27 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 sm:gap-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Reports & Analytics</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Real-time insights with strict TAX/ESTIMATE separation.</p>
         </div>
         
         {!['receivables', 'payables'].includes(activeTab) && (
-          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-xl">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 sm:p-2.5 rounded-2xl w-full xl:w-auto">
+            <div className="flex items-center justify-between sm:justify-start gap-2">
               <span className="text-xs font-semibold text-slate-500 uppercase px-2">From</span>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500" />
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 flex-1 sm:flex-initial" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between sm:justify-start gap-2">
               <span className="text-xs font-semibold text-slate-500 uppercase px-2">To</span>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500" />
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 flex-1 sm:flex-initial" />
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide border-b border-slate-200 dark:border-slate-800">
+      <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-none touch-pan-x border-b border-slate-200 dark:border-slate-800 -mx-1 px-1">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -284,40 +284,42 @@ const Reports = () => {
             <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Profit & Loss Statement (Tax Stream)</h2>
             {pnlLoading ? <div className="p-8 text-slate-500 dark:text-slate-400">Loading P&L...</div> : pnlRes?.data ? (
               <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <table className="w-full text-left">
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
-                    <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
-                      <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Gross Sales (Tax Invoices)</td>
-                      <td className="py-4 px-6 text-right font-mono text-lg text-indigo-600 dark:text-indigo-400">{formatMoney(pnlRes.data.grossSales ?? pnlRes.data.netSales)}</td>
-                    </tr>
-                    {(pnlRes.data.salesReturns || 0) > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left min-w-[340px]">
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
                       <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
-                        <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Less: Sales Returns</td>
-                        <td className="py-4 px-6 text-right font-mono text-lg text-rose-500">({formatMoney(pnlRes.data.salesReturns)})</td>
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Gross Sales (Tax Invoices)</td>
+                        <td className="py-4 px-6 text-right font-mono text-lg text-indigo-600 dark:text-indigo-400">{formatMoney(pnlRes.data.grossSales ?? pnlRes.data.netSales)}</td>
                       </tr>
-                    )}
-                    <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
-                      <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Net Sales (Tax Invoices)</td>
-                      <td className="py-4 px-6 text-right font-mono text-lg text-indigo-600 dark:text-indigo-400">{formatMoney(pnlRes.data.netSales)}</td>
-                    </tr>
-                    <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
-                      <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Cost of Goods Sold (COGS)</td>
-                      <td className="py-4 px-6 text-right font-mono text-lg text-rose-600 dark:text-rose-400">({formatMoney(pnlRes.data.cogs)})</td>
-                    </tr>
-                    <tr className="bg-slate-800/30">
-                      <td className="py-4 px-6 text-sm font-bold text-slate-900 dark:text-white">Gross Profit</td>
-                      <td className={`py-4 px-6 text-right font-mono text-lg font-bold ${pnlRes.data.grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatMoney(pnlRes.data.grossProfit)}</td>
-                    </tr>
-                    <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
-                      <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Operating Expenses</td>
-                      <td className="py-4 px-6 text-right font-mono text-lg text-rose-600 dark:text-rose-400">({formatMoney(pnlRes.data.totalExpenses)})</td>
-                    </tr>
-                    <tr className="bg-indigo-500/5 border-t-2 border-indigo-500/30">
-                      <td className="py-5 px-6 text-base font-bold text-slate-900 dark:text-white">Net Profit</td>
-                      <td className={`py-5 px-6 text-right font-mono text-xl font-bold ${pnlRes.data.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatMoney(pnlRes.data.netProfit)}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                      {(pnlRes.data.salesReturns || 0) > 0 && (
+                        <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
+                          <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Less: Sales Returns</td>
+                          <td className="py-4 px-6 text-right font-mono text-lg text-rose-500">({formatMoney(pnlRes.data.salesReturns)})</td>
+                        </tr>
+                      )}
+                      <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Net Sales (Tax Invoices)</td>
+                        <td className="py-4 px-6 text-right font-mono text-lg text-indigo-600 dark:text-indigo-400">{formatMoney(pnlRes.data.netSales)}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Cost of Goods Sold (COGS)</td>
+                        <td className="py-4 px-6 text-right font-mono text-lg text-rose-600 dark:text-rose-400">({formatMoney(pnlRes.data.cogs)})</td>
+                      </tr>
+                      <tr className="bg-slate-800/30">
+                        <td className="py-4 px-6 text-sm font-bold text-slate-900 dark:text-white">Gross Profit</td>
+                        <td className={`py-4 px-6 text-right font-mono text-lg font-bold ${pnlRes.data.grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatMoney(pnlRes.data.grossProfit)}</td>
+                      </tr>
+                      <tr className="hover:bg-slate-100 dark:hover:bg-slate-800/20">
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-600 dark:text-slate-300">Operating Expenses</td>
+                        <td className="py-4 px-6 text-right font-mono text-lg text-rose-600 dark:text-rose-400">({formatMoney(pnlRes.data.totalExpenses)})</td>
+                      </tr>
+                      <tr className="bg-indigo-500/5 border-t-2 border-indigo-500/30">
+                        <td className="py-5 px-6 text-base font-bold text-slate-900 dark:text-white">Net Profit</td>
+                        <td className={`py-5 px-6 text-right font-mono text-xl font-bold ${pnlRes.data.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>{formatMoney(pnlRes.data.netProfit)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : <div className="p-8 text-slate-500">No data available.</div>}
           </div>
@@ -329,7 +331,7 @@ const Reports = () => {
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Estimates are completely excluded. Bills of Supply (0% GST exempt) are shown separately and never add to output tax.</p>
             {gstLoading ? <div className="p-8 text-slate-500 dark:text-slate-400">Loading GST...</div> : gstRes?.data ? (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
                   <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Output GST (Sales)</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Taxable Value</span><span className="font-mono text-slate-900 dark:text-white">{formatMoney(gstRes.data.outputGst?.taxableValue)}</span></div>
@@ -343,7 +345,7 @@ const Reports = () => {
                     )}
                   </div>
                 </div>
-                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
                   <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Input Tax Credit (Purchases)</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Taxable Value</span><span className="font-mono text-slate-900 dark:text-white">{formatMoney(gstRes.data.inputTaxCredit?.taxableValue)}</span></div>
@@ -353,9 +355,9 @@ const Reports = () => {
                     <div className="flex justify-between pt-2 border-t border-slate-300 dark:border-slate-700"><span className="text-slate-900 dark:text-white font-bold">Total ITC</span><span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(gstRes.data.inputTaxCredit?.total)}</span></div>
                   </div>
                 </div>
-                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl">
+                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-2xl">
                   <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Net GST Liability</h3>
-                  <p className={`text-4xl font-bold font-mono ${gstRes.data.netLiability >= 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  <p className={`text-3xl sm:text-4xl font-bold font-mono ${gstRes.data.netLiability >= 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                     {formatMoney(gstRes.data.netLiability)}
                   </p>
                   <p className="text-xs text-slate-500 mt-2">{gstRes.data.netLiability >= 0 ? 'Payable to Government' : 'Credit Available'}</p>

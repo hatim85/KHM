@@ -90,39 +90,39 @@ const Expenses = () => {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Expenses</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Track operational costs and overheads.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <button
             onClick={() => setShowCatModal(true)}
-            className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2"
+            className="w-full sm:w-auto justify-center px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2"
           >
             <SettingsIcon size={16} /> Manage Categories
           </button>
           <button
             onClick={() => setShowExpenseModal(true)}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
+            className="w-full sm:w-auto justify-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
           >
             <PlusIcon size={16} /> Record Expense
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[36px]">Start</label>
           <input
             type="date"
             value={startDate}
             onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+            className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[36px]">End</label>
           <input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+            className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
       </div>
@@ -130,7 +130,7 @@ const Expenses = () => {
       {/* Expenses List */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[720px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
@@ -181,14 +181,14 @@ const Expenses = () => {
 
       {/* Record Expense Modal */}
       {showExpenseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl relative my-8">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md z-10 rounded-t-3xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 rounded-t-2xl sm:rounded-t-3xl">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Record Expense</h2>
               <button type="button" onClick={() => setShowExpenseModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
             </div>
-            <form onSubmit={handleExpenseSubmit} className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-5">
+            <form onSubmit={handleExpenseSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Date *</label>
                   <input required type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]" />
@@ -197,7 +197,7 @@ const Expenses = () => {
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Amount (₹) *</label>
                   <input required type="number" min="0" step="0.01" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" placeholder="0.00" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Expense Category *</label>
                   <SearchableSelect
                     required
@@ -221,14 +221,14 @@ const Expenses = () => {
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Ref / UTR Number</label>
                   <input type="text" value={expenseForm.referenceNumber} onChange={(e) => setExpenseForm({ ...expenseForm, referenceNumber: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" placeholder="Optional" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Notes</label>
                   <textarea rows="2" value={expenseForm.notes} onChange={(e) => setExpenseForm({ ...expenseForm, notes: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none resize-none" placeholder="Description of the expense..."></textarea>
                 </div>
               </div>
-              <div className="pt-4 flex justify-end gap-3 border-t border-slate-200 dark:border-slate-800">
-                <button type="button" onClick={() => setShowExpenseModal(false)} className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
-                <button type="submit" disabled={!expenseForm.category} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20 disabled:opacity-50">Save Expense</button>
+              <div className="pt-4 flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onClick={() => setShowExpenseModal(false)} className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
+                <button type="submit" disabled={!expenseForm.category} className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20 disabled:opacity-50">Save Expense</button>
               </div>
             </form>
           </div>
@@ -237,9 +237,9 @@ const Expenses = () => {
 
       {/* Manage Category Modal */}
       {showCatModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-sm shadow-2xl relative">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-sm shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 rounded-t-2xl sm:rounded-t-3xl">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">Quick Add Category</h2>
               <button type="button" onClick={() => setShowCatModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-2xl" title="Close"><XIcon size={18} /></button>
             </div>
@@ -247,36 +247,34 @@ const Expenses = () => {
             {/* Quick list of existing */}
             <div className="p-4 max-h-48 overflow-y-auto bg-slate-100 dark:bg-slate-950/30 border-b border-slate-200 dark:border-slate-800">
               <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Existing Categories</h3>
-              <div className="flex flex-wrap gap-2">
-                <div className="space-y-1">
-                  {catData.map(c => (
-                    <div
-                      key={c._id}
-                      className="group flex items-center justify-between px-3 py-2 bg-slate-200 dark:bg-slate-800 rounded-lg"
-                    >
-                      <span className="text-xs text-slate-600 dark:text-slate-300">
-                        {c.name}
-                        {!c.isActive && (
-                          <span className="text-amber-600 dark:text-amber-500 ml-1">(Inactive)</span>
-                        )}
-                      </span>
+              <div className="flex flex-col gap-1">
+                {catData.map(c => (
+                  <div
+                    key={c._id}
+                    className="group flex items-center justify-between px-3 py-2 bg-slate-200 dark:bg-slate-800 rounded-lg"
+                  >
+                    <span className="text-xs text-slate-600 dark:text-slate-300 truncate">
+                      {c.name}
+                      {!c.isActive && (
+                        <span className="text-amber-600 dark:text-amber-500 ml-1">(Inactive)</span>
+                      )}
+                    </span>
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCategory(c._id, c.name)}
-                        className="ml-3 w-6 h-6 flex items-center justify-center flex-shrink-0 text-rose-500 hover:text-rose-400 text-lg font-bold leading-none"
-                        title="Delete category"
-                        aria-label={`Delete ${c.name}`}
-                      >
-                        <XIcon size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(c._id, c.name)}
+                      className="ml-3 w-6 h-6 flex items-center justify-center flex-shrink-0 text-rose-500 hover:text-rose-400 text-lg font-bold leading-none"
+                      title="Delete category"
+                      aria-label={`Delete ${c.name}`}
+                    >
+                      <XIcon size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <form onSubmit={handleCatSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleCatSubmit} className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Category Name *</label>
                 <input required type="text" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" placeholder="e.g. Rent, Salary, Utilities" />

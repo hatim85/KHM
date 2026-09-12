@@ -131,17 +131,17 @@ const Products = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Products Master</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage items, pricing, and categorizations.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Products Master</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1">Manage items, pricing, and categorizations.</p>
         </div>
-        <div className="flex gap-2">
-          <Link to="/inventory/movements" className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Link to="/inventory/movements" className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-xs sm:text-sm rounded-xl transition flex items-center gap-1.5 sm:gap-2">
             <ClipboardListIcon size={16} /> Stock Ledger
           </Link>
-          <Link to="/inventory/master" className="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-sm rounded-xl transition flex items-center gap-2">
+          <Link to="/inventory/master" className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium text-xs sm:text-sm rounded-xl transition flex items-center gap-1.5 sm:gap-2">
             <TagIcon size={16} /> Categories
           </Link>
-          <button onClick={() => openModal()} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2">
+          <button onClick={() => openModal()} className="px-4 sm:px-5 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-1.5 sm:gap-2">
             <PlusIcon size={16} /> Add Product
           </button>
         </div>
@@ -283,15 +283,15 @@ const Products = () => {
 
       {/* Product Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl my-8 relative">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md z-10 rounded-t-3xl">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Edit Product' : 'Add Product'}</h2>
-              <button type="button" onClick={closeModal} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl my-4 sm:my-8 relative max-h-[92vh] flex flex-col">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 rounded-t-2xl sm:rounded-t-3xl shrink-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">{editingId ? 'Edit Product' : 'Add Product'}</h2>
+              <button type="button" onClick={closeModal} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg" title="Close"><XIcon size={18} /></button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Product Name *</label>
                   <input required type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
@@ -397,9 +397,9 @@ const Products = () => {
 
               </div>
 
-              <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900 py-4 -mb-6 -mx-6 px-6 rounded-b-3xl z-10">
-                <button type="button" onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
-                <button type="submit" className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20">{editingId ? 'Update Product' : 'Save Product'}</button>
+              <div className="pt-4 sm:pt-6 mt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900 py-3 sm:py-4 -mb-4 sm:-mb-6 -mx-4 sm:-mx-6 px-4 sm:px-6 rounded-b-2xl sm:rounded-b-3xl z-10">
+                <button type="button" onClick={closeModal} className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
+                <button type="submit" className="px-5 sm:px-6 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs sm:text-sm font-medium transition shadow-lg shadow-indigo-600/20">{editingId ? 'Update Product' : 'Save Product'}</button>
               </div>
             </form>
           </div>
@@ -408,16 +408,16 @@ const Products = () => {
 
       {/* Stock Adjustment Modal */}
       {showAdjustModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-md overflow-hidden shadow-2xl my-4">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Adjust Stock</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{adjustData.productName}</p>
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Adjust Stock</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate max-w-[240px]">{adjustData.productName}</p>
               </div>
-              <button onClick={() => setShowAdjustModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
+              <button onClick={() => setShowAdjustModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 rounded-lg" title="Close"><XIcon size={18} /></button>
             </div>
-            <form onSubmit={handleAdjustSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleAdjustSubmit} className="p-4 sm:p-6 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Stream *</label>
                 <select required value={adjustData.stream} onChange={(e) => setAdjustData({...adjustData, stream: e.target.value})} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
@@ -437,9 +437,9 @@ const Products = () => {
               {inventoryError && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300">{inventoryError}</div>
               )}
-              <div className="pt-4 flex justify-end gap-3">
-                <button type="button" onClick={() => setShowAdjustModal(false)} className="px-5 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
-                <button type="submit" disabled={adjustLoading} className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-blue-600/20">{adjustLoading ? 'Processing...' : 'Apply Adjustment'}</button>
+              <div className="pt-3 sm:pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowAdjustModal(false)} className="px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
+                <button type="submit" disabled={adjustLoading} className="px-4 sm:px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs sm:text-sm font-medium transition shadow-lg shadow-blue-600/20">{adjustLoading ? 'Processing...' : 'Apply Adjustment'}</button>
               </div>
             </form>
           </div>

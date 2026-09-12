@@ -5,25 +5,25 @@ const PurchaseDetailsModal = ({ purchase, onClose }) => {
   if (!purchase) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 dark:border-slate-800 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[92vh] overflow-y-auto flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Purchase Details: {purchase.invoiceNumber}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-10 rounded-t-2xl sm:rounded-t-3xl">
+          <div className="min-w-0 pr-2">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white truncate">Purchase Details: {purchase.invoiceNumber}</h2>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
               {new Date(purchase.invoiceDate).toLocaleDateString('en-IN')} &bull; Supplier: {purchase.supplierSnapshot?.name || purchase.supplier?.name || 'Unknown'}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition">
+          <button onClick={onClose} className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition flex-shrink-0">
             <XIcon size={20} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6 flex-1">
           <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-left border-collapse whitespace-nowrap">
+            <table className="w-full text-left border-collapse whitespace-nowrap min-w-[540px]">
               <thead>
                 <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Product</th>
@@ -56,7 +56,7 @@ const PurchaseDetailsModal = ({ purchase, onClose }) => {
           </div>
 
           <div className="mt-6 flex justify-end">
-            <div className="w-full sm:w-1/2 lg:w-1/3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 space-y-2">
+            <div className="w-full sm:w-80 bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 space-y-2">
               <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
                 <span>SubTotal</span>
                 <span>₹{(purchase.subTotal / 100).toFixed(2)}</span>

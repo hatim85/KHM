@@ -55,34 +55,34 @@ const LedgerView = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl transition" title="Back">
+      <div className="flex items-start sm:items-center gap-3 sm:gap-4">
+        <button onClick={() => navigate(-1)} className="p-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl transition flex-shrink-0" title="Back">
           <ArrowLeftIcon size={18} />
         </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
             {partyName} — Statement of Account
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+          <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1">
             {isCustomer ? 'Customer' : 'Supplier'} Ledger · Running balance of all transactions
           </p>
         </div>
       </div>
 
       {/* Balance Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
           <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Current Balance</p>
-          <p className={`text-3xl font-bold font-mono mt-1 ${currentBalance > 0 ? (isCustomer ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400') : currentBalance < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
+          <p className={`text-2xl sm:text-3xl font-bold font-mono mt-1 ${currentBalance > 0 ? (isCustomer ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400') : currentBalance < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400'}`}>
             ₹{(Math.abs(currentBalance) / 100).toFixed(2)}
           </p>
           <p className="text-xs text-slate-500 mt-1">{balanceLabel}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5">
           <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Transactions</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-white font-mono mt-1">{filtered.length}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white font-mono mt-1">{filtered.length}</p>
         </div>
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-end">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex items-end">
           <select value={streamFilter} onChange={(e) => { setStreamFilter(e.target.value); setPage(1); }} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
             <option value="">All Streams</option>
             <option value="TAX">TAX Only</option>
@@ -92,29 +92,29 @@ const LedgerView = () => {
       </div>
 
       {/* Date Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">From</label>
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[36px]">From</label>
           <input
             type="date"
             value={startDate}
             onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+            className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">To</label>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[36px]">To</label>
           <input
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+            className="w-full sm:w-auto bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
         {(startDate || endDate) && (
           <button
             onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
-            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline self-center"
+            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline py-1.5"
           >
             Clear dates
           </button>
@@ -128,7 +128,7 @@ const LedgerView = () => {
       {/* Ledger Table */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[750px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>

@@ -157,7 +157,7 @@ const Payments = () => {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto shrink-0"
         >
           <PlusIcon size={16} /> New Payment / Receipt
         </button>
@@ -171,7 +171,7 @@ const Payments = () => {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
         <select value={streamFilter} onChange={(e) => { setStreamFilter(e.target.value); setPage(1); }} className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
           <option value="">All Streams</option>
           <option value="TAX">TAX</option>
@@ -205,7 +205,7 @@ const Payments = () => {
       {/* Table */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[850px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
@@ -268,19 +268,19 @@ const Payments = () => {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-auto max-h-[92vh] flex flex-col">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10 shrink-0">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
                 New {formData.type === 'RECEIPT' ? 'Receipt' : 'Payment'}
               </h2>
               <button onClick={() => { setShowModal(false); setAllocations({}); }} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1">
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3.5 sm:space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Type</label>
                     <select required value={formData.type} onChange={(e) => { setFormData({ ...formData, type: e.target.value }); setAllocations({}); }} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
@@ -297,29 +297,27 @@ const Payments = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                      {partyType}
-                    </label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                    {partyType}
+                  </label>
 
-                    <SearchableSelect
-                      required
-                      value={formData.partyId}
-                      onChange={(val) => {
-                        setFormData({
-                          ...formData,
-                          partyId: val
-                        });
-                        setAllocations({});
-                      }}
-                      placeholder={`Search ${partyType}...`}
-                      options={partyList.map(p => ({ value: p._id, label: p.name }))}
-                    />
-                  </div>
+                  <SearchableSelect
+                    required
+                    value={formData.partyId}
+                    onChange={(val) => {
+                      setFormData({
+                        ...formData,
+                        partyId: val
+                      });
+                      setAllocations({});
+                    }}
+                    placeholder={`Search ${partyType}...`}
+                    options={partyList.map(p => ({ value: p._id, label: p.name }))}
+                  />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Amount (₹) *</label>
                     <input required type="number" min="0.01" step="0.01" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono outline-none" placeholder="0.00" />
@@ -330,7 +328,7 @@ const Payments = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Payment Mode</label>
                     <select value={formData.paymentMode} onChange={(e) => setFormData({ ...formData, paymentMode: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
@@ -350,15 +348,15 @@ const Payments = () => {
               {/* Invoice Allocation Section */}
               {formData.partyId && unpaidInvoices && unpaidInvoices.length > 0 && (
                 <div className="border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/30 overflow-hidden mt-6">
-                  <div className="bg-slate-100 dark:bg-slate-800/80 px-4 py-3 border-b border-slate-300 dark:border-slate-700 flex justify-between items-center">
+                  <div className="bg-slate-100 dark:bg-slate-800/80 px-4 py-3 border-b border-slate-300 dark:border-slate-700 flex flex-wrap justify-between items-center gap-2">
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Invoice Allocation</h3>
                     <button type="button" onClick={autoAllocate} className="text-xs bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/30 px-3 py-1.5 rounded-lg font-medium transition">
                       Auto-Allocate (FIFO)
                     </button>
                   </div>
 
-                  <div className="max-h-48 overflow-y-auto">
-                    <table className="w-full text-left border-collapse">
+                  <div className="max-h-48 overflow-y-auto overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[480px]">
                       <thead className="bg-white/70 dark:bg-slate-900/40 text-xs text-slate-500 dark:text-slate-400 uppercase">
                         <tr>
                           <th className="px-4 py-2 font-semibold">Invoice</th>
@@ -395,7 +393,7 @@ const Payments = () => {
                     </table>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-900/60 p-3 flex justify-between items-center text-sm border-t border-slate-300 dark:border-slate-700">
+                  <div className="bg-white dark:bg-slate-900/60 p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm border-t border-slate-300 dark:border-slate-700">
                     <span className="text-slate-500 dark:text-slate-400">Total Allocated: <span className="text-slate-900 dark:text-white font-mono font-bold">₹{totalAllocated.toFixed(2)}</span></span>
                     <span className="text-slate-500 dark:text-slate-400">Unallocated: <span className={`font-mono font-bold ${unallocated < 0 ? 'text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>₹{unallocated.toFixed(2)}</span></span>
                   </div>
@@ -407,12 +405,12 @@ const Payments = () => {
                 <textarea rows="2" value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none resize-none"></textarea>
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900 pb-2">
-                <button type="button" onClick={() => { setShowModal(false); setAllocations({}); }} className="px-5 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">Cancel</button>
+              <div className="pt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 sticky bottom-0 bg-white dark:bg-slate-900 pb-2 shrink-0">
+                <button type="button" onClick={() => { setShowModal(false); setAllocations({}); }} className="w-full sm:w-auto px-5 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition text-center">Cancel</button>
                 <button
                   type="submit"
                   disabled={loading || unallocated < 0}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-medium transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 text-center"
                 >
                   {loading ? 'Saving...' : 'Save Payment'}
                 </button>

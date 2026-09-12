@@ -60,10 +60,22 @@ const SearchableSelect = ({
       // If space below is limited, open upwards
       const openUpward = spaceBelow < dropdownHeight && rect.top > dropdownHeight;
 
+      // Calculate safe left and width for mobile screens
+      const viewportWidth = window.innerWidth;
+      const minDropdownWidth = Math.min(260, viewportWidth - 24);
+      const computedWidth = Math.max(rect.width, minDropdownWidth);
+      const safeWidth = Math.min(computedWidth, viewportWidth - 24);
+      let safeLeft = rect.left;
+      if (safeLeft + safeWidth > viewportWidth - 12) {
+        safeLeft = Math.max(12, viewportWidth - safeWidth - 12);
+      }
+      safeLeft = Math.max(12, safeLeft);
+
       setDropdownStyle({
         position: 'fixed',
-        left: `${rect.left}px`,
-        width: `${rect.width}px`,
+        left: `${safeLeft}px`,
+        width: `${safeWidth}px`,
+        maxWidth: 'calc(100vw - 24px)',
         top: openUpward ? 'auto' : `${rect.bottom + 4}px`,
         bottom: openUpward ? `${window.innerHeight - rect.top + 4}px` : 'auto',
         zIndex: 9999,
@@ -85,7 +97,7 @@ const SearchableSelect = ({
 
   const dropdownRef = useRef(null);
 
-  // Click-outside handler
+  // Click-outside handler (supports both mouse and touch devices)
   useEffect(() => {
     const handleClickOutside = (e) => {
       const clickedInsideWrapper = wrapperRef.current && wrapperRef.current.contains(e.target);
@@ -96,7 +108,11 @@ const SearchableSelect = ({
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
   }, []);
 
   // Scroll highlighted item into view

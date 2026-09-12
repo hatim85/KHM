@@ -86,19 +86,19 @@ const Returns = () => {
         </div>
         <button
           onClick={openModal}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto shrink-0"
         >
           <PlusIcon size={16} /> New {isSales ? 'Sales' : 'Purchase'} Return
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+        <div className="flex gap-2 w-full sm:w-auto">
           {['SALES_RETURN', 'PURCHASE_RETURN'].map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); setPage(1); }}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-sm font-semibold transition text-center ${
                 tab === t ? 'bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
               }`}
             >
@@ -106,7 +106,7 @@ const Returns = () => {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stream</label>
           <select
             value={streamFilter}
@@ -146,7 +146,7 @@ const Returns = () => {
 
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[800px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
@@ -199,13 +199,13 @@ const Returns = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl my-8">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-3xl shadow-2xl my-auto max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">New {isSales ? 'Sales' : 'Purchase'} Return</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" title="Close"><XIcon size={18} /></button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Original Document (Completed only) *</label>
                 <SearchableSelect
@@ -219,7 +219,7 @@ const Returns = () => {
 
               {returnable && (
                 <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl">
-                  <table className="w-full text-left whitespace-nowrap">
+                  <table className="w-full text-left whitespace-nowrap min-w-[480px]">
                     <thead>
                       <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                         <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Product</th>
@@ -257,7 +257,7 @@ const Returns = () => {
                 <input required type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Damaged in transit" className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none" />
               </div>
 
-              <button type="submit" disabled={loading} className="w-full px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold rounded-2xl shadow-xl active:scale-95 transition disabled:opacity-50">
+              <button type="submit" disabled={loading} className="w-full px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold rounded-2xl shadow-xl active:scale-95 transition disabled:opacity-50 shrink-0">
                 {loading ? 'Processing...' : 'Create Return (updates stock, ledger, GST, outstanding)'}
               </button>
             </form>

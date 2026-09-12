@@ -140,7 +140,7 @@ const UserManagement = () => {
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition flex items-center gap-2 self-start sm:self-auto"
+          className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/20 transition flex items-center justify-center gap-2 self-stretch sm:self-auto"
         >
           <PlusIcon size={16} />
           <span>Add New User</span>
@@ -149,7 +149,7 @@ const UserManagement = () => {
 
       {/* Notifications */}
       {error && (
-        <div className="m-6 mb-0 p-4 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between">
+        <div className="m-4 sm:m-6 mb-0 p-4 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between">
           <p className="text-sm text-red-600 dark:text-red-300">{error}</p>
           <button onClick={() => setError(null)} className="text-red-400 hover:text-red-300" title="Dismiss">
             <XIcon size={16} />
@@ -158,7 +158,7 @@ const UserManagement = () => {
       )}
 
       {success && (
-        <div className="m-6 mb-0 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+        <div className="m-4 sm:m-6 mb-0 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckIcon size={16} className="text-emerald-600 dark:text-emerald-400" />
             <p className="text-sm text-emerald-600 dark:text-emerald-400">{success}</p>
@@ -170,7 +170,7 @@ const UserManagement = () => {
       )}
 
       {/* Table */}
-      <div className="p-6 overflow-x-auto">
+      <div className="p-4 sm:p-6 overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -178,7 +178,7 @@ const UserManagement = () => {
         ) : users.length === 0 ? (
           <div className="text-center py-8 text-slate-500 text-sm">No users found.</div>
         ) : (
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[580px]">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800">
                 <th className="pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
@@ -292,9 +292,9 @@ const UserManagement = () => {
 
       {/* Modal: Add User */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-6">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-4 sm:mb-6 shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Create New User</h3>
                 <p className="text-xs text-slate-500 mt-0.5">Admin-only account creation</p>
@@ -308,7 +308,7 @@ const UserManagement = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateUser} className="space-y-4">
+            <form onSubmit={handleCreateUser} className="space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">
                   Full Name
@@ -369,18 +369,18 @@ const UserManagement = () => {
                 </select>
               </div>
 
-              <div className="pt-4 flex justify-end gap-3">
+              <div className="pt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl transition"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl transition text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition disabled:opacity-50 flex items-center gap-2"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {actionLoading && (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -395,9 +395,9 @@ const UserManagement = () => {
 
       {/* Modal: Edit User */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-6">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between mb-4 sm:mb-6 shrink-0">
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit User</h3>
                 <p className="text-xs text-slate-500 mt-0.5">{editingUser.email}</p>
@@ -411,7 +411,7 @@ const UserManagement = () => {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateUser} className="space-y-4">
+            <form onSubmit={handleUpdateUser} className="space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">
                   Full Name
@@ -469,18 +469,18 @@ const UserManagement = () => {
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-3">
+              <div className="pt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingUser(null)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl transition"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold rounded-xl transition text-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition disabled:opacity-50 flex items-center gap-2"
+                  className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/30 transition disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {actionLoading && (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

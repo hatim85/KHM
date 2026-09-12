@@ -35,17 +35,17 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Welcome banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-100 dark:from-indigo-900/60 via-white dark:via-slate-900 to-slate-50 dark:to-slate-900 border border-indigo-500/20 p-8">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-r from-indigo-100 dark:from-indigo-900/60 via-white dark:via-slate-900 to-slate-50 dark:to-slate-900 border border-indigo-500/20 p-5 sm:p-7 md:p-8">
         <div className="relative z-10">
-          <span className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
             KHM Accounts &bull; Wholesale ERP
           </span>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mt-1">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mt-1">
             Welcome back, {user?.name || 'Administrator'}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-xl">
+          <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1.5 sm:mt-2 max-w-xl">
             Internal operations overview. Manage Estimated Bills, Tax Invoices, Purchases, Inventory Movements, and Ledgers.
           </p>
         </div>
@@ -53,46 +53,46 @@ const Dashboard = () => {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
             <span>Today's Sales</span>
             <TrendingUpIcon size={18} className="text-indigo-600 dark:text-indigo-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white font-mono">
             {loadingStats ? '...' : `₹${(stats.todaySales / 100).toFixed(2)}`}
           </div>
           <p className="text-xs text-slate-500 mt-1">Estimates &amp; Invoices</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
             <span>Today's Purchases</span>
             <ShoppingCartIcon size={18} className="text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white font-mono">
             {loadingStats ? '...' : `₹${(stats.todayPurchases / 100).toFixed(2)}`}
           </div>
           <p className="text-xs text-slate-500 mt-1">Stock Inward</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
             <span>Receivables</span>
             <BanknoteIcon size={18} className="text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+          <div className="text-xl sm:text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
             {loadingStats ? '...' : `₹${(stats.receivables / 100).toFixed(2)}`}
           </div>
           <p className="text-xs text-slate-500 mt-1">Customer Outstanding</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 backdrop-blur-sm">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
             <span>Payables</span>
             <CreditCardIcon size={18} className="text-rose-600 dark:text-rose-400" />
           </div>
-          <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+          <div className="text-xl sm:text-2xl font-bold text-rose-600 dark:text-rose-400 font-mono">
             {loadingStats ? '...' : `₹${(stats.payables / 100).toFixed(2)}`}
           </div>
           <p className="text-xs text-slate-500 mt-1">Supplier Balance</p>
@@ -100,24 +100,24 @@ const Dashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <button onClick={() => navigate('/sales/estimate/new')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group">
-            <FileTextIcon size={24} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
-            <span className="text-xs font-semibold text-slate-900 dark:text-white">New Estimated Bill</span>
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6">
+        <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mb-3 sm:mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          <button onClick={() => navigate('/sales/estimate/new')} className="flex flex-col items-center justify-center p-3 sm:p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group active:scale-95">
+            <FileTextIcon size={22} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
+            <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">New Estimated Bill</span>
           </button>
-          <button onClick={() => navigate('/sales/tax/new')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group">
-            <ReceiptIcon size={24} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
-            <span className="text-xs font-semibold text-slate-900 dark:text-white">New Tax Invoice</span>
+          <button onClick={() => navigate('/sales/tax/new')} className="flex flex-col items-center justify-center p-3 sm:p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group active:scale-95">
+            <ReceiptIcon size={22} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
+            <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">New Tax Invoice</span>
           </button>
-          <button onClick={() => navigate('/purchases/new')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group">
-            <PackageIcon size={24} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
-            <span className="text-xs font-semibold text-slate-900 dark:text-white">Record Purchase</span>
+          <button onClick={() => navigate('/purchases/new')} className="flex flex-col items-center justify-center p-3 sm:p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group active:scale-95">
+            <PackageIcon size={22} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
+            <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">Record Purchase</span>
           </button>
-          <button onClick={() => navigate('/payments')} className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group">
-            <WalletIcon size={24} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
-            <span className="text-xs font-semibold text-slate-900 dark:text-white">Receive Payment</span>
+          <button onClick={() => navigate('/payments')} className="flex flex-col items-center justify-center p-3 sm:p-4 bg-white dark:bg-slate-800/60 hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-slate-300 dark:border-slate-700/60 rounded-xl transition text-center group active:scale-95">
+            <WalletIcon size={22} className="mb-1.5 text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
+            <span className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">Receive Payment</span>
           </button>
         </div>
       </div>

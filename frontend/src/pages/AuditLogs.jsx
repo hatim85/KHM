@@ -38,18 +38,18 @@ const AuditLogs = () => {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 rounded-2xl">
         <input 
           type="text" 
           placeholder="Search Actions (e.g. SALE)" 
           value={filters.action} 
           onChange={(e) => handleFilterChange('action', e.target.value)}
-          className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          className="w-full sm:w-auto bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
         />
         <select 
           value={filters.entity} 
           onChange={(e) => handleFilterChange('entity', e.target.value)}
-          className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          className="w-full sm:w-auto bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
         >
           <option value="">All Entities</option>
           <option value="Sale">Sale</option>
@@ -57,27 +57,27 @@ const AuditLogs = () => {
           <option value="Payment">Payment</option>
           <option value="Expense">Expense</option>
         </select>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">From</span>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <span className="text-xs text-slate-500 min-w-[32px]">From</span>
           <input 
             type="date" 
             value={filters.startDate} 
             onChange={(e) => handleFilterChange('startDate', e.target.value)}
-            className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]"
+            className="w-full sm:w-auto bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">To</span>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <span className="text-xs text-slate-500 min-w-[32px]">To</span>
           <input 
             type="date" 
             value={filters.endDate} 
             onChange={(e) => handleFilterChange('endDate', e.target.value)}
-            className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]"
+            className="w-full sm:w-auto bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none [color-scheme:light] dark:[color-scheme:dark]"
           />
         </div>
         <button 
           onClick={() => { setFilters({ action: '', entity: '', startDate: '', endDate: '' }); setPage(1); }}
-          className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition ml-auto"
+          className="w-full sm:w-auto text-center sm:text-right px-3 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition sm:ml-auto"
         >
           Clear Filters
         </button>
@@ -86,7 +86,7 @@ const AuditLogs = () => {
       {/* Table */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
+          <table className="w-full text-left whitespace-nowrap min-w-[760px]">
             <thead className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Timestamp</th>

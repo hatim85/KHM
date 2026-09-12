@@ -29,41 +29,41 @@ const Purchases = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Purchases</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage inward stock and accounts payable.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Purchases</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1">Manage inward stock and accounts payable.</p>
         </div>
         <Link
           to="/purchases/new"
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
+          className="w-full sm:w-auto justify-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2 shrink-0"
         >
           <PlusIcon size={16} /> New Purchase Bill
         </Link>
       </div>
 
       {/* Stream Tabs */}
-      <div className="flex gap-2 p-1 bg-white dark:bg-slate-900/50 rounded-xl w-fit border border-slate-200 dark:border-slate-800">
+      <div className="flex flex-wrap gap-1.5 sm:gap-2 p-1 bg-white dark:bg-slate-900/50 rounded-xl w-full sm:w-fit border border-slate-200 dark:border-slate-800">
         <button
           onClick={() => { setStreamFilter('ALL'); setPage(1); }}
-          className={`px-4 py-1.5 text-sm font-medium rounded-lg transition ${streamFilter === 'ALL' ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-800/50'}`}
+          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition ${streamFilter === 'ALL' ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-800/50'}`}
         >
           All Bills
         </button>
         <button
           onClick={() => { setStreamFilter('TAX'); setPage(1); }}
-          className={`px-4 py-1.5 text-sm font-medium rounded-lg transition ${streamFilter === 'TAX' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-800/50'}`}
+          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition ${streamFilter === 'TAX' ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-800/50'}`}
         >
           Tax Purchases
         </button>
         <button
           onClick={() => { setStreamFilter('ESTIMATE'); setPage(1); }}
-          className={`px-4 py-1.5 text-sm font-medium rounded-lg transition ${streamFilter === 'ESTIMATE' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-800/50'}`}
+          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition ${streamFilter === 'ESTIMATE' ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-800/50'}`}
         >
           Estimated Bills
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
           <input
             type="date"
@@ -72,7 +72,7 @@ const Purchases = () => {
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
           <input
             type="date"
@@ -92,7 +92,7 @@ const Purchases = () => {
       {/* Table */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[760px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date & Stream</th>

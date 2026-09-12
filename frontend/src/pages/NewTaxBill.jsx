@@ -274,16 +274,18 @@ const NewTaxBill = () => {
         </div>
       )}
 
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/sales/tax')} className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl transition" title="Back">
-          <ArrowLeftIcon size={18} />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">New Tax Bill</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Create an official GST Invoice.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/sales/tax')} className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl transition shrink-0" title="Back">
+            <ArrowLeftIcon size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">New Tax Bill</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-0.5">Create an official GST Invoice.</p>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+        <div className="flex items-center gap-3 self-end sm:self-auto">
+          <label className="flex items-center gap-2 cursor-pointer text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
             <input type="checkbox" checked={isCustomMode} onChange={(e) => setIsCustomMode(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
             Custom/Draft PDF Mode
           </label>
@@ -298,7 +300,7 @@ const NewTaxBill = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Document Header */}
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 grid grid-cols-1 md:grid-cols-3 gap-6 relative overflow-hidden">
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 blur-3xl -z-10 opacity-30 bg-indigo-500"></div>
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Customer *</label>

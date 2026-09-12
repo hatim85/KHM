@@ -121,12 +121,12 @@ const TaxBills = () => {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Tax Bills (GST Invoices & Bills of Supply)</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Tax invoices for GST items and Bills of Supply for 0% GST exempt items. Bills of Supply carry the Notification No. 12/2017 exemption note.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Tax Bills (GST Invoices &amp; Bills of Supply)</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-1">Tax invoices for GST items and Bills of Supply for 0% GST exempt items. Bills of Supply carry the Notification No. 12/2017 exemption note.</p>
         </div>
         <Link
           to="/sales/tax/new"
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
+          className="w-full sm:w-auto justify-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2 shrink-0"
         >
           <PlusIcon size={16} /> Create Tax Bill
         </Link>
@@ -139,8 +139,8 @@ const TaxBills = () => {
       )}
 
       {/* Status + payment filters + Date filters */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</label>
           <select
             value={statusFilter}
@@ -153,7 +153,7 @@ const TaxBills = () => {
             <option value="CANCELLED">Cancelled</option>
           </select>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Doc Type</label>
           <select
             value={billTypeFilter}
@@ -165,7 +165,7 @@ const TaxBills = () => {
             <option value="BILL_OF_SUPPLY">Bill of Supply</option>
           </select>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment</label>
           <select
             value={payFilter}
@@ -178,7 +178,7 @@ const TaxBills = () => {
             <option value="PAID">Paid</option>
           </select>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
           <input
             type="date"
@@ -187,7 +187,7 @@ const TaxBills = () => {
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
           <input
             type="date"
@@ -196,7 +196,7 @@ const TaxBills = () => {
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sort</label>
           <select
             value={`${sortBy}-${sortDesc}`}
@@ -219,7 +219,7 @@ const TaxBills = () => {
       {/* Table */}
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse whitespace-nowrap">
+          <table className="w-full text-left border-collapse whitespace-nowrap min-w-[800px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date</th>
