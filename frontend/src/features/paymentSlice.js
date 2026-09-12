@@ -5,7 +5,7 @@ export const fetchPayments = createAsyncThunk('payments/fetchAll', async (filter
   try {
     const params = new URLSearchParams(filters).toString();
     const { data } = await api.get(`/payments?${params}`);
-    return data.data;
+    return data;
   } catch (err) {
     return rejectWithValue(err.response?.data?.message || 'Failed to fetch payments');
   }
@@ -62,6 +62,7 @@ const paymentSlice = createSlice({
   name: 'payments',
   initialState: {
     data: [],
+    pagination: null,
     ledger: [],
     unpaidInvoices: [],
     loading: false,
@@ -73,7 +74,11 @@ const paymentSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchPayments.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchPayments.fulfilled, (state, action) => { state.loading = false; state.data = action.payload; })
+      .addCase(fetchPayments.fulfilled, (state, action) => { 
+        state.loading = false; 
+        state.data = action.payload.data || action.payload;
+        state.pagination = action.payload.pagination || null;
+      })
       .addCase(fetchPayments.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
 
       .addCase(createPayment.pending, (state) => { state.loading = true; state.error = null; })

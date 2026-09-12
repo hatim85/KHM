@@ -2,27 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchStockMovements } from '../features/inventorySlice';
 import { productThunks } from '../features/masterDataSlice';
+import Pagination from '../components/Pagination';
 
 const StockMovements = () => {
   const dispatch = useDispatch();
-  const { movements, movementsLoading } = useSelector(state => state.inventory);
+  const { movements, movementsPagination, movementsLoading } = useSelector(state => state.inventory);
   const { data: products } = useSelector(state => state.masterData.products);
   
   const [streamFilter, setStreamFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     dispatch(productThunks.fetchAll());
   }, [dispatch]);
 
   useEffect(() => {
-    const filters = {};
+    const filters = { page, limit: 15 };
     if (streamFilter) filters.stream = streamFilter;
     if (typeFilter) filters.type = typeFilter;
     if (productFilter) filters.product = productFilter;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
     dispatch(fetchStockMovements(filters));
-  }, [dispatch, streamFilter, typeFilter, productFilter]);
+  }, [dispatch, streamFilter, typeFilter, productFilter, startDate, endDate, page]);
 
   return (
     <div className="space-y-6">
@@ -35,7 +41,7 @@ const StockMovements = () => {
       <div className="flex flex-wrap gap-3">
         <select
           value={streamFilter}
-          onChange={(e) => setStreamFilter(e.target.value)}
+          onChange={(e) => { setStreamFilter(e.target.value); setPage(1); }}
           className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white rounded-xl px-4 py-2 outline-none appearance-none focus:border-indigo-500"
         >
           <option value="">All Streams</option>
@@ -45,7 +51,7 @@ const StockMovements = () => {
         
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
+          onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
           className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white rounded-xl px-4 py-2 outline-none appearance-none focus:border-indigo-500"
         >
           <option value="">All Types</option>
@@ -56,12 +62,31 @@ const StockMovements = () => {
 
         <select
           value={productFilter}
-          onChange={(e) => setProductFilter(e.target.value)}
+          onChange={(e) => { setProductFilter(e.target.value); setPage(1); }}
           className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-white rounded-xl px-4 py-2 outline-none appearance-none focus:border-indigo-500 max-w-xs"
         >
           <option value="">All Products</option>
           {products.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
         </select>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
       </div>
 
       {/* Ledger Table */}
@@ -75,19 +100,20 @@ const StockMovements = () => {
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stream</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Type</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Quantity</th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Sec Qty</th>
-                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Source</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Stock After</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Buyer / Supplier</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invoice #</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Remarks</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {movementsLoading && movements.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-8 text-center text-slate-500 text-sm">Loading movements...</td>
+                  <td colSpan="9" className="py-8 text-center text-slate-500 text-sm">Loading movements...</td>
                 </tr>
               ) : movements.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-8 text-center text-slate-500 text-sm">No stock movements found.</td>
+                  <td colSpan="9" className="py-8 text-center text-slate-500 text-sm">No stock movements found.</td>
                 </tr>
               ) : (
                 movements.map((m) => (
@@ -119,12 +145,45 @@ const StockMovements = () => {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <span className="text-sm font-mono text-slate-500">
-                        {(m.secondaryQuantity || 0) !== 0 ? (m.secondaryQuantity > 0 ? `+${m.secondaryQuantity}` : m.secondaryQuantity) : '—'}
+                      <span className="text-sm font-mono text-slate-700 dark:text-slate-300">
+                        {m.stockAfter != null ? m.stockAfter : '—'}
                       </span>
                     </td>
                     <td className="py-4 px-6">
-                      <span className="text-xs text-slate-500">{m.referenceModel}</span>
+                      {(() => {
+                        const actualBuyer = m.buyer || m.referenceDocument?.customer;
+                        const actualSupplier = m.supplier || m.referenceDocument?.supplier;
+                        if (actualBuyer) {
+                          return (
+                            <div>
+                              {/* <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mr-1">BUYER</span> */}
+                              <span className="text-sm text-slate-700 dark:text-slate-300">{actualBuyer.name}</span>
+                              {actualBuyer.phone && <p className="text-xs text-slate-500">{actualBuyer.phone}</p>}
+                            </div>
+                          );
+                        } else if (actualSupplier) {
+                          return (
+                            <div>
+                              {/* <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mr-1">SUPPLIER</span> */}
+                              <span className="text-sm text-slate-700 dark:text-slate-300">{actualSupplier.name}</span>
+                              {actualSupplier.phone && <p className="text-xs text-slate-500">{actualSupplier.phone}</p>}
+                            </div>
+                          );
+                        }
+                        return <span className="text-xs text-slate-500">—</span>;
+                      })()}
+                    </td>
+                    <td className="py-4 px-6">
+                      {m.referenceDocument?.invoiceNumber || m.referenceDocument?.billNumber || m.referenceDocument?.returnNumber ? (
+                        <div>
+                          <span className="text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                            {m.referenceDocument.invoiceNumber || m.referenceDocument.billNumber || m.referenceDocument.returnNumber}
+                          </span>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{m.referenceModel}</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">{m.referenceModel}</span>
+                      )}
                     </td>
                     <td className="py-4 px-6">
                       <span className="text-xs text-slate-500 dark:text-slate-400 max-w-[200px] truncate block">{m.remarks || '—'}</span>
@@ -135,6 +194,7 @@ const StockMovements = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={movementsPagination} onPageChange={setPage} />
       </div>
     </div>
   );

@@ -17,12 +17,31 @@ import { applyStockIn, applyStockOut } from '../services/inventoryService.js';
 
 export const getReturns = async (req, res, next) => {
   try {
-    const { returnType, stream } = req.query;
-    let query = Return.find().sort({ createdAt: -1 });
-    if (returnType) query = query.where('returnType').equals(returnType);
-    if (stream) query = query.where('stream').equals(stream);
-    const returns = await query.limit(200);
-    res.json({ success: true, count: returns.length, data: returns });
+    const { returnType, stream, page = 1, limit = 15, startDate, endDate } = req.query;
+    let match = {};
+    if (returnType) match.returnType = returnType;
+    if (stream) match.stream = stream;
+    if (startDate || endDate) {
+      match.createdAt = {};
+      if (startDate) match.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = end;
+      }
+    }
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
+    const [returns, total] = await Promise.all([
+      Return.find(match).sort({ createdAt: -1 }).skip(skip).limit(parsedLimit),
+      Return.countDocuments(match)
+    ]);
+    res.json({
+      success: true,
+      data: returns,
+      pagination: { total, page: parsedPage, limit: parsedLimit, totalPages: Math.ceil(total / parsedLimit) }
+    });
   } catch (error) {
     next(error);
   }

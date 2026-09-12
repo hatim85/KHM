@@ -66,20 +66,32 @@ export const deleteExpenseCategory = async (req, res, next) => {
 
 export const getExpenses = async (req, res, next) => {
   try {
-    const { startDate, endDate, category } = req.query;
+    const { startDate, endDate, category, page = 1, limit = 15 } = req.query;
     
-    let query = Expense.find().populate('category', 'name').sort({ date: -1, createdAt: -1 });
-    
-    if (category) {
-      query = query.where('category').equals(category);
+    let match = {};
+    if (category) match.category = category;
+    if (startDate || endDate) {
+      match.date = {};
+      if (startDate) match.date.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.date.$lte = end;
+      }
     }
     
-    if (startDate && endDate) {
-      query = query.where('date').gte(new Date(startDate)).lte(new Date(endDate));
-    }
-    
-    const expenses = await query;
-    res.json({ success: true, count: expenses.length, data: expenses });
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
+    const [expenses, total] = await Promise.all([
+      Expense.find(match).populate('category', 'name').sort({ date: -1, createdAt: -1 }).skip(skip).limit(parsedLimit),
+      Expense.countDocuments(match)
+    ]);
+    res.json({
+      success: true,
+      data: expenses,
+      pagination: { total, page: parsedPage, limit: parsedLimit, totalPages: Math.ceil(total / parsedLimit) }
+    });
   } catch (error) {
     next(error);
   }

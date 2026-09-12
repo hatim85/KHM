@@ -3,19 +3,25 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { fetchNotes, cancelNote } from '../features/notesSlice';
 import { PlusIcon } from '../components/icons';
+import Pagination from '../components/Pagination';
 
 const Notes = () => {
   const dispatch = useDispatch();
-  const { data: notes, loading, error } = useSelector((state) => state.notes);
+  const { data: notes, pagination, loading, error } = useSelector((state) => state.notes);
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    const filters = {};
+    const filters = { page, limit: 15 };
     if (typeFilter) filters.noteType = typeFilter;
     if (statusFilter) filters.status = statusFilter;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
     dispatch(fetchNotes(filters));
-  }, [dispatch, typeFilter, statusFilter]);
+  }, [dispatch, typeFilter, statusFilter, startDate, endDate, page]);
 
   const handleCancel = async (note) => {
     const label = note.noteType === 'CREDIT_NOTE' ? 'credit note' : 'debit note';
@@ -24,7 +30,12 @@ const Notes = () => {
     if (result.error) {
       alert(typeof result.payload === 'string' ? result.payload : 'Cancellation failed.');
     } else {
-      dispatch(fetchNotes({ ...(typeFilter ? { noteType: typeFilter } : {}), ...(statusFilter ? { status: statusFilter } : {}) }));
+      const filters = { page, limit: 15 };
+      if (typeFilter) filters.noteType = typeFilter;
+      if (statusFilter) filters.status = statusFilter;
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
+      dispatch(fetchNotes(filters));
     }
   };
 
@@ -54,7 +65,7 @@ const Notes = () => {
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Type</label>
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           >
             <option value="">All</option>
@@ -66,7 +77,7 @@ const Notes = () => {
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</label>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           >
             <option value="">All</option>
@@ -74,6 +85,24 @@ const Notes = () => {
             <option value="COMPLETED">Completed</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
         </div>
       </div>
 
@@ -149,6 +178,7 @@ const Notes = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
     </div>
   );

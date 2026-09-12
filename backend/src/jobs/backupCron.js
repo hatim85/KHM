@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import { runDatabaseBackup, isBackupConfigured } from '../services/backupService.js';
 
 export const initBackupCron = () => {
-  cron.schedule('0 22 * * *', async () => {
+  cron.schedule('00 22 * * *', async () => {
     console.log('[Cron] Checking Google Drive backup configuration...');
 
     try {
@@ -19,7 +19,12 @@ export const initBackupCron = () => {
       await runDatabaseBackup();
 
     } catch (error) {
-      console.error('[Cron] Scheduled backup failed:', error);
+      if (error.isAuthError) {
+        console.error('[Cron] ⚠️  BACKUP FAILED — Google Drive authorization expired or revoked.');
+        console.error('[Cron] ⚠️  An Admin must reconnect Google Drive in Settings > System Backups.');
+      } else {
+        console.error('[Cron] Scheduled backup failed:', error);
+      }
     }
   });
 

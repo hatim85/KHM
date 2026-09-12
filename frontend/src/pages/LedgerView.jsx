@@ -1,18 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchCustomerLedger, fetchSupplierLedger } from '../features/paymentSlice';
 import { ArrowLeftIcon } from '../components/icons';
+import Pagination from '../components/Pagination';
+
+const PAGE_SIZE = 15;
 
 const LedgerView = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { partyType, partyId } = useParams(); // 'customer' or 'supplier'
+  const { partyType, partyId } = useParams();
   const [searchParams] = useSearchParams();
   const partyName = searchParams.get('name') || 'Party';
 
   const { ledger, loading, error } = useSelector(state => state.payments);
   const [streamFilter, setStreamFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [page, setPage] = useState(1);
 
   const isCustomer = partyType === 'customer';
 
@@ -24,7 +30,25 @@ const LedgerView = () => {
     }
   }, [dispatch, partyType, partyId, streamFilter, isCustomer]);
 
-  const currentBalance = ledger.length > 0 ? ledger[ledger.length - 1].balanceAfter : 0;
+  const filtered = useMemo(() => {
+    if (!startDate && !endDate) return ledger;
+    return ledger.filter(entry => {
+      const d = new Date(entry.createdAt);
+      if (startDate && d < new Date(startDate)) return false;
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (d > end) return false;
+      }
+      return true;
+    });
+  }, [ledger, startDate, endDate]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const fakePagination = filtered.length > 0 ? { total: filtered.length, page, limit: PAGE_SIZE, totalPages } : null;
+
+  const currentBalance = filtered.length > 0 ? filtered[filtered.length - 1].balanceAfter : 0;
   const balanceLabel = isCustomer
     ? (currentBalance > 0 ? 'They owe you' : currentBalance < 0 ? 'Advance paid' : 'Settled')
     : (currentBalance > 0 ? 'You owe them' : currentBalance < 0 ? 'Advance paid to them' : 'Settled');
@@ -56,15 +80,45 @@ const LedgerView = () => {
         </div>
         <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
           <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Total Transactions</p>
-          <p className="text-3xl font-bold text-slate-900 dark:text-white font-mono mt-1">{ledger.length}</p>
+          <p className="text-3xl font-bold text-slate-900 dark:text-white font-mono mt-1">{filtered.length}</p>
         </div>
         <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-end">
-          <select value={streamFilter} onChange={(e) => setStreamFilter(e.target.value)} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+          <select value={streamFilter} onChange={(e) => { setStreamFilter(e.target.value); setPage(1); }} className="w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none appearance-none">
             <option value="">All Streams</option>
             <option value="TAX">TAX Only</option>
             <option value="ESTIMATE">ESTIMATE Only</option>
           </select>
         </div>
+      </div>
+
+      {/* Date Filters */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">From</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">To</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        {(startDate || endDate) && (
+          <button
+            onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
+            className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline self-center"
+          >
+            Clear dates
+          </button>
+        )}
       </div>
 
       {error && (
@@ -89,10 +143,10 @@ const LedgerView = () => {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {loading && ledger.length === 0 ? (
                 <tr><td colSpan="7" className="py-8 text-center text-slate-500 text-sm">Loading ledger...</td></tr>
-              ) : ledger.length === 0 ? (
-                <tr><td colSpan="7" className="py-8 text-center text-slate-500 text-sm">No transactions found for this party.</td></tr>
+              ) : paginated.length === 0 ? (
+                <tr><td colSpan="7" className="py-8 text-center text-slate-500 text-sm">No transactions found{startDate || endDate ? ' for the selected dates.' : ' for this party.'}</td></tr>
               ) : (
-                ledger.map((entry, idx) => (
+                paginated.map((entry, idx) => (
                   <tr key={entry._id || idx} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
                     <td className="py-4 px-6 text-sm text-slate-600 dark:text-slate-300">{new Date(entry.createdAt).toLocaleDateString('en-IN')}</td>
                     <td className="py-4 px-6">
@@ -135,6 +189,7 @@ const LedgerView = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={fakePagination} onPageChange={setPage} />
       </div>
     </div>
   );

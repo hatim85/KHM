@@ -11,8 +11,15 @@ export const fetchSales = createAsyncThunk(
       if (filters?.paymentStatus) params.append('paymentStatus', filters.paymentStatus);
       if (filters?.billType) params.append('billType', filters.billType);
       
+      if (filters?.page) params.append('page', filters.page);
+      if (filters?.limit) params.append('limit', filters.limit);
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.sortBy) params.append('sortBy', filters.sortBy);
+      if (filters?.sortDesc !== undefined) params.append('sortDesc', filters.sortDesc);
+
       const response = await api.get(`/sales?${params.toString()}`);
-      return response.data.data;
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch sales');
     }
@@ -61,6 +68,7 @@ const salesSlice = createSlice({
   name: 'sales',
   initialState: {
     data: [],
+    pagination: null,
     loading: false,
     error: null,
     createSuccess: false,
@@ -78,7 +86,8 @@ const salesSlice = createSlice({
       })
       .addCase(fetchSales.fulfilled, (state, action) => {
         state.loading = false;
-        state.data = action.payload;
+        state.data = action.payload.data || action.payload; // Fallback if backend not updated yet
+        state.pagination = action.payload.pagination || null;
       })
       .addCase(fetchSales.rejected, (state, action) => {
         state.loading = false;

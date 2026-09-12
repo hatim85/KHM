@@ -10,14 +10,48 @@ import { resolveDualQty } from '../services/lineItemService.js';
 
 export const getPurchases = async (req, res, next) => {
   try {
-    const { stream, status } = req.query;
-    let query = Purchase.find().populate('supplier', 'name').sort({ createdAt: -1 });
+    const { stream, status, page = 1, limit = 15, startDate, endDate, sortBy = 'invoiceDate', sortDesc = 'true' } = req.query;
+    
+    let match = {};
+    if (stream) match.transactionType = stream;
+    if (status) match.status = status;
+    
+    if (startDate || endDate) {
+      match.invoiceDate = {};
+      if (startDate) match.invoiceDate.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.invoiceDate.$lte = end;
+      }
+    }
 
-    if (stream) query = query.where('transactionType').equals(stream);
-    if (status) query = query.where('status').equals(status);
+    const sortOrder = sortDesc === 'true' ? -1 : 1;
+    const sort = { [sortBy]: sortOrder };
+    
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
 
-    const purchases = await query;
-    res.json({ success: true, count: purchases.length, data: purchases });
+    const [purchases, total] = await Promise.all([
+      Purchase.find(match)
+        .populate('supplier', 'name gstin')
+        .sort(sort)
+        .skip(skip)
+        .limit(parsedLimit),
+      Purchase.countDocuments(match)
+    ]);
+
+    res.json({
+      success: true,
+      data: purchases,
+      pagination: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(total / parsedLimit)
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -157,6 +191,7 @@ export const createPurchase = async (req, res, next) => {
           stream: transactionType,
           referenceDocument: purchase._id,
           referenceModel: 'Purchase',
+          supplier,
         }, session);
       }
 

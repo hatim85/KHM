@@ -7,7 +7,7 @@ export const fetchReturns = createAsyncThunk(
     try {
       const params = new URLSearchParams(filters).toString();
       const response = await api.get(`/returns?${params}`);
-      return response.data.data;
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch returns');
     }
@@ -54,6 +54,7 @@ const returnsSlice = createSlice({
   name: 'returns',
   initialState: {
     data: [],
+    pagination: null,
     returnable: null,
     loading: false,
     error: null,
@@ -64,7 +65,11 @@ const returnsSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchReturns.pending, (state) => { state.loading = true; state.error = null; })
-      .addCase(fetchReturns.fulfilled, (state, action) => { state.loading = false; state.data = action.payload; })
+      .addCase(fetchReturns.fulfilled, (state, action) => { 
+        state.loading = false; 
+        state.data = action.payload.data || action.payload; 
+        state.pagination = action.payload.pagination || null; 
+      })
       .addCase(fetchReturns.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
       .addCase(createSalesReturn.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(createSalesReturn.fulfilled, (state, action) => { state.loading = false; state.data.unshift(action.payload); })

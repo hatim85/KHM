@@ -5,12 +5,18 @@ import { Link } from 'react-router-dom';
 import { openDB } from 'idb';
 import { PlusIcon } from '../components/icons';
 import { usePopup } from '../context/PopupContext';
+import Pagination from '../components/Pagination';
 
 const EstimatedBills = () => {
   const dispatch = useDispatch();
-  const { data: sales, loading, error } = useSelector(state => state.sales);
+  const { data: sales, pagination, loading, error } = useSelector(state => state.sales);
   const [statusFilter, setStatusFilter] = useState('');
   const [payFilter, setPayFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [sortBy, setSortBy] = useState('invoiceDate');
+  const [sortDesc, setSortDesc] = useState(true);
+  const [page, setPage] = useState(1);
   const [offlineBills, setOfflineBills] = useState([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const { showConfirm, showAlert } = usePopup();
@@ -29,12 +35,20 @@ const EstimatedBills = () => {
 
   useEffect(() => {
     // Only fetch ESTIMATE bills
-    const filters = { stream: 'ESTIMATE' };
+    const filters = { 
+      stream: 'ESTIMATE', 
+      page, 
+      limit: 15,
+      sortBy,
+      sortDesc
+    };
     if (statusFilter) filters.status = statusFilter;
     if (payFilter) filters.paymentStatus = payFilter;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
     dispatch(fetchSales(filters));
     checkOfflineBills();
-  }, [dispatch, statusFilter, payFilter]);
+  }, [dispatch, statusFilter, payFilter, startDate, endDate, sortBy, sortDesc, page]);
 
   const syncOfflineBills = async () => {
     if (!navigator.onLine) {
@@ -119,13 +133,13 @@ const EstimatedBills = () => {
         </div>
       )}
 
-      {/* Status + payment filters */}
+      {/* Status + payment filters + Date filters */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-3">
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</label>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-amber-500"
           >
             <option value="">All</option>
@@ -138,13 +152,49 @@ const EstimatedBills = () => {
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment</label>
           <select
             value={payFilter}
-            onChange={(e) => setPayFilter(e.target.value)}
+            onChange={(e) => { setPayFilter(e.target.value); setPage(1); }}
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-amber-500"
           >
             <option value="">All</option>
             <option value="UNPAID">Unpaid</option>
             <option value="PARTIAL">Partial</option>
             <option value="PAID">Paid</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-amber-500"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-amber-500"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sort</label>
+          <select
+            value={`${sortBy}-${sortDesc}`}
+            onChange={(e) => {
+              const [s, d] = e.target.value.split('-');
+              setSortBy(s);
+              setSortDesc(d === 'true');
+              setPage(1);
+            }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-amber-500"
+          >
+            <option value="invoiceDate-true">Date (Newest)</option>
+            <option value="invoiceDate-false">Date (Oldest)</option>
+            <option value="grandTotal-true">Total (Highest)</option>
+            <option value="grandTotal-false">Total (Lowest)</option>
           </select>
         </div>
       </div>
@@ -230,6 +280,7 @@ const EstimatedBills = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
     </div>
   );

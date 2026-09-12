@@ -96,6 +96,72 @@ export const isBackupConfigured = async () => {
   }
 };
 
+/**
+ * Check Google Drive connection status by making a real API call.
+ * Returns: { status: 'connected'|'auth_required'|'not_configured', message: string }
+ */
+export const checkDriveStatus = async () => {
+  try {
+    // Check env config first
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) {
+      return { status: 'not_configured', message: 'Google OAuth credentials not configured on the server.' };
+    }
+    if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
+      return { status: 'not_configured', message: 'Google Drive folder ID not configured on the server.' };
+    }
+
+    // Check if refresh token exists in DB
+    const settings = await CompanySettings.findOne({ isSingleton: true }).select('+googleRefreshToken');
+    if (!settings?.googleRefreshToken) {
+      return { status: 'not_configured', message: 'Google Drive not connected. Click "Connect Google Drive" to set up.' };
+    }
+
+    // Make a real API call to verify the token is still valid
+    const oauth2Client = createOAuth2Client();
+    oauth2Client.setCredentials({ refresh_token: settings.googleRefreshToken });
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    // A lightweight about.get call to verify auth without listing files
+    await drive.about.get({ fields: 'user(displayName,emailAddress)' });
+
+    return { status: 'connected', message: 'Google Drive is connected and authorized.' };
+  } catch (error) {
+    const code = error.code || error.response?.status || error.status;
+    if (code === 401 || code === 400 || error.message?.includes('invalid_grant') || error.message?.includes('Token has been expired')) {
+      return { status: 'auth_required', message: 'Google Drive authorization has expired or been revoked. Please reconnect.' };
+    }
+    return { status: 'auth_required', message: `Google Drive connection error: ${error.message}` };
+  }
+};
+
+/**
+ * Test Google Drive connection by listing files in the backup folder.
+ * Returns file count and last backup info without exposing secrets.
+ */
+export const testDriveConnection = async () => {
+  const drive = await getDriveService();
+  const aboutRes = await drive.about.get({ fields: 'user(displayName,emailAddress),storageQuota' });
+
+  const listRes = await drive.files.list({
+    q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and name contains 'khm-db-backup-' and trashed = false`,
+    fields: 'files(id, name, createdTime, size)',
+    orderBy: 'createdTime desc',
+    pageSize: 5,
+  });
+
+  const files = listRes.data.files || [];
+  return {
+    success: true,
+    driveUser: aboutRes.data.user?.emailAddress || 'Unknown',
+    backupCount: files.length,
+    lastBackup: files.length > 0 ? {
+      name: files[0].name,
+      createdAt: files[0].createdTime,
+      sizeMB: files[0].size ? (Number(files[0].size) / (1024 * 1024)).toFixed(2) : '—',
+    } : null,
+  };
+};
+
 export const runDatabaseBackup = async (userId) => {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const fileName = `khm-db-backup-${timestamp}.gz`;
@@ -162,14 +228,28 @@ export const runDatabaseBackup = async (userId) => {
       fs.unlinkSync(localFilePath);
     }
 
+    // Detect auth errors and provide a clear message
+    const code = error.code || error.response?.status || error.status;
+    const isAuthError = code === 401 || code === 400 || error.message?.includes('invalid_grant') || error.message?.includes('Token has been expired');
+
+    const summary = isAuthError
+      ? 'Backup failed: Google Drive authorization expired. Admin must reconnect Google Drive in Settings.'
+      : `Automated backup failed: ${error.message}`;
+
     await AuditLog.create({
       action: 'BACKUP_FAILED',
       entity: 'System',
       user: null,
-      summary: `Automated backup failed: ${error.message}`,
-      metadata: { error: error.message, actor: 'SYSTEM' },
+      summary,
+      metadata: { error: error.message, isAuthError, actor: 'SYSTEM' },
       ipAddress: '127.0.0.1'
     }).catch(() => {});
+
+    if (isAuthError) {
+      const authErr = new Error('Google Drive authorization expired or revoked. Please reconnect Google Drive in Settings > System Backups.');
+      authErr.isAuthError = true;
+      throw authErr;
+    }
 
     throw error;
   }

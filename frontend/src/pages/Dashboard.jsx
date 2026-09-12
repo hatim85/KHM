@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import api from '../api';
 import {
   TrendingUpIcon, ShoppingCartIcon, BanknoteIcon, CreditCardIcon,
   FileTextIcon, ReceiptIcon, PackageIcon, WalletIcon,
@@ -9,6 +10,29 @@ import {
 const Dashboard = () => {
   const { user } = useSelector((state) => state.auth);
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    todaySales: 0,
+    todayPurchases: 0,
+    receivables: 0,
+    payables: 0
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await api.get('/reports/dashboard-stats');
+        if (response.data.success) {
+          setStats(response.data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch dashboard stats', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    fetchStats();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -35,7 +59,9 @@ const Dashboard = () => {
             <span>Today's Sales</span>
             <TrendingUpIcon size={18} className="text-indigo-600 dark:text-indigo-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white">₹0.00</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white">
+            {loadingStats ? '...' : `₹${(stats.todaySales / 100).toFixed(2)}`}
+          </div>
           <p className="text-xs text-slate-500 mt-1">Estimates &amp; Invoices</p>
         </div>
 
@@ -44,7 +70,9 @@ const Dashboard = () => {
             <span>Today's Purchases</span>
             <ShoppingCartIcon size={18} className="text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white">₹0.00</div>
+          <div className="text-2xl font-bold text-slate-900 dark:text-white">
+            {loadingStats ? '...' : `₹${(stats.todayPurchases / 100).toFixed(2)}`}
+          </div>
           <p className="text-xs text-slate-500 mt-1">Stock Inward</p>
         </div>
 
@@ -53,7 +81,9 @@ const Dashboard = () => {
             <span>Receivables</span>
             <BanknoteIcon size={18} className="text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">₹0.00</div>
+          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+            {loadingStats ? '...' : `₹${(stats.receivables / 100).toFixed(2)}`}
+          </div>
           <p className="text-xs text-slate-500 mt-1">Customer Outstanding</p>
         </div>
 
@@ -62,7 +92,9 @@ const Dashboard = () => {
             <span>Payables</span>
             <CreditCardIcon size={18} className="text-rose-600 dark:text-rose-400" />
           </div>
-          <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">₹0.00</div>
+          <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+            {loadingStats ? '...' : `₹${(stats.payables / 100).toFixed(2)}`}
+          </div>
           <p className="text-xs text-slate-500 mt-1">Supplier Balance</p>
         </div>
       </div>

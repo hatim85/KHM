@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   useGetProfitAndLossQuery,
   useGetGstSummaryQuery,
@@ -16,6 +16,9 @@ import {
   useGetExpenseReportQuery
 } from '../features/reportApi';
 import { formatMoney } from '../utils/formatters';
+import Pagination from '../components/Pagination';
+
+const PAGE_SIZE = 15;
 
 const Reports = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -25,10 +28,15 @@ const Reports = () => {
   const [endDate, setEndDate] = useState('');
   const queryParams = { startDate, endDate };
 
+  // Per-table pagination state keyed by table title
+  const [pageMap, setPageMap] = useState({});
+  const getPage = (key) => pageMap[key] || 1;
+  const setPage = useCallback((key, p) => setPageMap(prev => ({ ...prev, [key]: p })), []);
+
   // Skip queries unless their tab is active
   const { data: pnlRes, isLoading: pnlLoading } = useGetProfitAndLossQuery(queryParams, { skip: activeTab !== 'pnl' && activeTab !== 'overview' });
   const { data: gstRes, isLoading: gstLoading } = useGetGstSummaryQuery(queryParams, { skip: activeTab !== 'gst' });
-  const { data: stockRes, isLoading: stockLoading } = useGetStockValuationQuery(undefined, { skip: activeTab !== 'inventory' });
+  const { data: stockRes, isLoading: stockLoading } = useGetStockValuationQuery(queryParams, { skip: activeTab !== 'inventory' });
   const { data: custRes, isLoading: custLoading } = useGetCustomerOutstandingQuery(undefined, { skip: activeTab !== 'receivables' });
   const { data: supRes, isLoading: supLoading } = useGetSupplierOutstandingQuery(undefined, { skip: activeTab !== 'payables' });
   
@@ -53,6 +61,12 @@ const Reports = () => {
   const renderTable = (loading, data, columns, title, emptyMsg = 'No data found.') => {
     if (loading) return <div className="p-8 text-slate-500 dark:text-slate-400">Loading {title}...</div>;
     if (!data || data.length === 0) return <div className="p-8 text-slate-500">{emptyMsg}</div>;
+
+    const currentPage = getPage(title);
+    const totalPages = Math.ceil(data.length / PAGE_SIZE);
+    const paginated = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    const pagination = data.length > PAGE_SIZE ? { total: data.length, page: currentPage, limit: PAGE_SIZE, totalPages } : null;
+
     return (
       <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
         <div className="overflow-x-auto">
@@ -67,7 +81,7 @@ const Reports = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
-              {data.map((row, i) => (
+              {paginated.map((row, i) => (
                 <tr key={row._id || i} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
                   {columns.map((col, j) => (
                     <td key={j} className={`py-4 px-6 text-sm ${col.align === 'right' ? 'text-right' : ''}`}>
@@ -79,6 +93,7 @@ const Reports = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={(p) => setPage(title, p)} />
       </div>
     );
   };
@@ -162,7 +177,7 @@ const Reports = () => {
         
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Estimate Conversions</h2>
-          {renderTable(conversionsLoading, conversionsRes?.data, [
+          {renderTable(conversionsLoading, conversionsRes?.data?.filter(c => c.conversionStatus === 'CONVERTED'), [
             { header: 'Estimate No', render: r => <div className="font-mono">{r.estimateNumber}</div> },
             { header: 'Estimate Total', align: 'right', render: r => formatMoney(r.estimateTotal) },
             { header: 'Conversion Status', render: r => (
@@ -201,7 +216,7 @@ const Reports = () => {
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Real-time insights with strict TAX/ESTIMATE separation.</p>
         </div>
         
-        {!['inventory', 'receivables', 'payables'].includes(activeTab) && (
+        {!['receivables', 'payables'].includes(activeTab) && (
           <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 rounded-xl">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-500 uppercase px-2">From</span>
@@ -219,7 +234,7 @@ const Reports = () => {
         {tabs.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => { setActiveTab(tab.id); setPageMap({}); }}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition whitespace-nowrap ${
               activeTab === tab.id 
                 ? 'bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40'
@@ -359,6 +374,7 @@ const Reports = () => {
             {renderTable(stockLoading, stockRes?.data?.items, [
               { header: 'Product', render: r => r.name },
               { header: 'SKU', render: r => <span className="font-mono text-xs text-slate-400">{r.sku || '—'}</span> },
+              { header: 'HSN', render: r => <span className="font-mono text-xs text-slate-400">{r.hsn || '—'}</span> },
               { header: 'TAX Qty', align: 'right', render: r => <span className="font-mono text-indigo-600 dark:text-indigo-300">{r.taxStock ?? '—'}</span> },
               { header: 'EST Qty', align: 'right', render: r => <span className="font-mono text-amber-600 dark:text-amber-300">{r.estimateStock ?? '—'}</span> },
               { header: 'Total Qty', align: 'right', render: r => <span className="font-bold">{r.quantity}</span> },

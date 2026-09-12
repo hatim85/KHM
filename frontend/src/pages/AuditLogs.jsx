@@ -1,31 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchAuditLogs } from '../features/auditSlice';
+import Pagination from '../components/Pagination';
 
 const AuditLogs = () => {
   const dispatch = useDispatch();
-  const { data: logs, loading, error, total, page, pages } = useSelector(state => state.audit);
+  const { data: logs, pagination, loading, error } = useSelector(state => state.audit);
 
   const [filters, setFilters] = useState({
     action: '',
     entity: '',
     startDate: '',
     endDate: '',
-    page: 1,
   });
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    dispatch(fetchAuditLogs(filters));
-  }, [dispatch, filters]);
+    dispatch(fetchAuditLogs({ ...filters, page, limit: 15 }));
+  }, [dispatch, filters, page]);
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
-  };
-
-  const handlePageChange = (newPage) => {
-    if (newPage > 0 && newPage <= pages) {
-      setFilters(prev => ({ ...prev, page: newPage }));
-    }
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPage(1);
   };
 
   return (
@@ -80,7 +76,7 @@ const AuditLogs = () => {
           />
         </div>
         <button 
-          onClick={() => setFilters({ action: '', entity: '', startDate: '', endDate: '', page: 1 })}
+          onClick={() => { setFilters({ action: '', entity: '', startDate: '', endDate: '' }); setPage(1); }}
           className="px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition ml-auto"
         >
           Clear Filters
@@ -139,31 +135,7 @@ const AuditLogs = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        {!loading && pages > 1 && (
-          <div className="bg-slate-100 dark:bg-slate-800/20 px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              Showing <span className="font-bold text-slate-900 dark:text-white">{logs.length}</span> of <span className="font-bold text-slate-900 dark:text-white">{total}</span> logs
-            </span>
-            <div className="flex gap-2">
-              <button 
-                disabled={page === 1}
-                onClick={() => handlePageChange(page - 1)}
-                className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition"
-              >
-                Prev
-              </button>
-              <button 
-                disabled={page === pages}
-                onClick={() => handlePageChange(page + 1)}
-                className="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
     </div>
   );

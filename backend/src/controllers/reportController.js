@@ -234,6 +234,7 @@ export const getStockValuation = async (req, res, next) => {
         _id: p._id,
         name: p.name,
         sku: p.sku,
+        hsn: p.hsn,
         quantity: taxQty + estQty,
         taxStock: taxQty,
         estimateStock: estQty,
@@ -495,5 +496,60 @@ export const getExpenseReport = async (req, res, next) => {
 
     const expenses = await Expense.find(match).populate('category', 'name').sort({ date: -1 }).limit(100);
     res.json({ success: true, data: expenses });
+  } catch (error) { next(error); }
+};
+
+// ==========================================
+// 15. DASHBOARD STATS
+// ==========================================
+export const getDashboardStats = async (req, res, next) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const todayMatch = { $gte: today, $lte: endOfToday };
+
+    // Today's Sales
+    const salesAgg = await Sale.aggregate([
+      { $match: { invoiceDate: todayMatch, status: 'COMPLETED' } },
+      { $group: { _id: null, totalSales: { $sum: '$grandTotal' } } }
+    ]);
+    const todaySales = salesAgg[0]?.totalSales || 0;
+
+    // Today's Purchases
+    const purchasesAgg = await Purchase.aggregate([
+      { $match: { invoiceDate: todayMatch, status: 'COMPLETED' } },
+      { $group: { _id: null, totalPurchases: { $sum: '$grandTotal' } } }
+    ]);
+    const todayPurchases = purchasesAgg[0]?.totalPurchases || 0;
+
+    // Receivables (Sum of positive balances across both streams)
+    const receivablesAgg = await CustomerLedger.aggregate([
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: { customer: '$customer', stream: '$stream' }, latestBalance: { $first: '$balanceAfter' } } },
+      { $match: { latestBalance: { $gt: 0 } } },
+      { $group: { _id: null, totalReceivables: { $sum: '$latestBalance' } } }
+    ]);
+    const receivables = receivablesAgg[0]?.totalReceivables || 0;
+
+    // Payables (Sum of positive balances across both streams)
+    const payablesAgg = await SupplierLedger.aggregate([
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: { supplier: '$supplier', stream: '$stream' }, latestBalance: { $first: '$balanceAfter' } } },
+      { $match: { latestBalance: { $gt: 0 } } },
+      { $group: { _id: null, totalPayables: { $sum: '$latestBalance' } } }
+    ]);
+    const payables = payablesAgg[0]?.totalPayables || 0;
+
+    res.json({
+      success: true,
+      data: {
+        todaySales,
+        todayPurchases,
+        receivables,
+        payables
+      }
+    });
   } catch (error) { next(error); }
 };

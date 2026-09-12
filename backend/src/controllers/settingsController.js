@@ -1,6 +1,6 @@
 import CompanySettings from '../models/CompanySettings.js';
 import ApiError from '../utils/ApiError.js';
-import { runDatabaseBackup, getGoogleAuthUrl, exchangeAndStoreTokens } from '../services/backupService.js';
+import { runDatabaseBackup, getGoogleAuthUrl, exchangeAndStoreTokens, checkDriveStatus, testDriveConnection } from '../services/backupService.js';
 import { isValidStateCode, normalizeGstin, normalizeStateCode } from '../utils/gstMaster.js';
 import { DOCUMENT_TYPES, previewAllSequences } from '../utils/documentNumbering.js';
 import { logAudit } from '../utils/auditLogger.js';
@@ -242,28 +242,45 @@ const googleCallback = async (req, res, next) => {
 
     await exchangeAndStoreTokens(code);
 
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head><title>KHM Backup - Google Drive Connected</title>
-      <style>
-        body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 40px; max-width: 600px; width: 100%; text-align: center; }
-        h1 { color: #22c55e; margin-top: 0; }
-      </style>
-      </head>
-      <body>
-        <div class="card">
-          <h1>✅ Google Drive Connected!</h1>
-          <p>Your Google Drive has been successfully linked for automated backups.</p>
-          <p>The authorization token has been securely stored in the database.</p>
-          <p>You may now close this window and return to the KHM ERP dashboard.</p>
-        </div>
-      </body>
-      </html>
-    `);
+    // Redirect back to the frontend Settings page so admin sees "Connected" immediately
+    res.redirect('/settings?google=connected');
   } catch (error) {
     next(new ApiError(500, `Google OAuth callback failed: ${error.message}`));
+  }
+};
+
+/**
+ * @desc    Check Google Drive connection status (real API probe)
+ * @route   GET /api/settings/google/status
+ * @access  Private/Admin
+ */
+const getDriveStatus = async (req, res, next) => {
+  try {
+    const result = await checkDriveStatus();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(new ApiError(500, `Failed to check Drive status: ${error.message}`));
+  }
+};
+
+/**
+ * @desc    Test Google Drive connection (lists recent backups, returns drive user)
+ * @route   POST /api/settings/google/test
+ * @access  Private/Admin
+ */
+const testDrive = async (req, res, next) => {
+  try {
+    const result = await testDriveConnection();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    const code = error.code || error.response?.status || error.status;
+    if (code === 401 || code === 400 || error.message?.includes('invalid_grant')) {
+      return res.status(200).json({
+        success: true,
+        data: { success: false, error: 'Authorization expired. Please reconnect Google Drive.' }
+      });
+    }
+    next(new ApiError(500, `Google Drive test failed: ${error.message}`));
   }
 };
 
@@ -275,4 +292,6 @@ export { getSettings,
   triggerBackup,
   googleAuth,
   googleCallback,
+  getDriveStatus,
+  testDrive,
  };

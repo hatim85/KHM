@@ -12,15 +12,32 @@ import { getNextDocumentNumber } from '../utils/documentNumbering.js';
 
 export const getPayments = async (req, res, next) => {
   try {
-    const { stream, type, partyType } = req.query;
-    let query = Payment.find().populate('partyId', 'name gstin phone').sort({ createdAt: -1 });
-
-    if (stream) query = query.where('stream').equals(stream);
-    if (type) query = query.where('type').equals(type);
-    if (partyType) query = query.where('partyType').equals(partyType);
-
-    const payments = await query;
-    res.json({ success: true, count: payments.length, data: payments });
+    const { stream, type, partyType, page = 1, limit = 15, startDate, endDate } = req.query;
+    let match = {};
+    if (stream) match.stream = stream;
+    if (type) match.type = type;
+    if (partyType) match.partyType = partyType;
+    if (startDate || endDate) {
+      match.createdAt = {};
+      if (startDate) match.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = end;
+      }
+    }
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
+    const [payments, total] = await Promise.all([
+      Payment.find(match).populate('partyId', 'name gstin phone').sort({ createdAt: -1 }).skip(skip).limit(parsedLimit),
+      Payment.countDocuments(match)
+    ]);
+    res.json({
+      success: true,
+      data: payments,
+      pagination: { total, page: parsedPage, limit: parsedLimit, totalPages: Math.ceil(total / parsedLimit) }
+    });
   } catch (error) {
     next(error);
   }

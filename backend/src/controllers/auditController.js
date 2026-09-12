@@ -31,11 +31,13 @@ export const getAuditLogs = async (req, res, next) => {
 
     res.json({
       success: true,
-      count: logs.length,
-      total,
-      page: Number(page),
-      pages: Math.ceil(total / Number(limit)),
-      data: logs
+      data: logs,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
+      }
     });
   } catch (error) {
     next(error);

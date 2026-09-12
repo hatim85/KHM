@@ -9,9 +9,13 @@ export const fetchStockMovements = createAsyncThunk(
       if (filters?.stream) params.append('stream', filters.stream);
       if (filters?.product) params.append('product', filters.product);
       if (filters?.type) params.append('type', filters.type);
+      if (filters?.page) params.append('page', filters.page);
+      if (filters?.limit) params.append('limit', filters.limit);
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
       
       const response = await api.get(`/inventory/movements?${params.toString()}`);
-      return response.data.data;
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch stock movements');
     }
@@ -46,6 +50,7 @@ const inventorySlice = createSlice({
   name: 'inventory',
   initialState: {
     movements: [],
+    movementsPagination: null,
     lowStock: [],
     movementsLoading: false,
     lowStockLoading: false,
@@ -70,7 +75,8 @@ const inventorySlice = createSlice({
       })
       .addCase(fetchStockMovements.fulfilled, (state, action) => {
         state.movementsLoading = false;
-        state.movements = action.payload;
+        state.movements = action.payload.data || action.payload;
+        state.movementsPagination = action.payload.pagination || null;
       })
       .addCase(fetchStockMovements.rejected, (state, action) => {
         state.movementsLoading = false;

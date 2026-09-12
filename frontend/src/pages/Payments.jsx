@@ -5,16 +5,20 @@ import { customerThunks, supplierThunks } from '../features/masterDataSlice';
 import { formatMoney } from '../utils/formatters';
 import { PlusIcon, XIcon, UndoIcon } from '../components/icons';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
 
 const Payments = () => {
   const dispatch = useDispatch();
-  const { data: payments, loading, error, unpaidInvoices } = useSelector(state => state.payments);
+  const { data: payments, pagination, loading, error, unpaidInvoices } = useSelector(state => state.payments);
   const { data: customers } = useSelector(state => state.masterData.customers);
   const { data: suppliers } = useSelector(state => state.masterData.suppliers);
 
   const [showModal, setShowModal] = useState(false);
   const [streamFilter, setStreamFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [page, setPage] = useState(1);
 
   const [formData, setFormData] = useState({
     type: 'RECEIPT',
@@ -36,17 +40,19 @@ const Payments = () => {
   const handleReverse = async (p) => {
     if (!window.confirm(`Reverse ${p.type} ${p.voucherNumber}? Invoice outstanding will be restored; history is preserved.`)) return;
     const result = await dispatch(reversePayment(p._id));
-    if (!result.error) dispatch(fetchPayments({}));
+    if (!result.error) dispatch(fetchPayments({ page, limit: 15, stream: streamFilter, type: typeFilter, startDate, endDate }));
   };
 
   useEffect(() => {
-    const filters = {};
+    const filters = { page, limit: 15 };
     if (streamFilter) filters.stream = streamFilter;
     if (typeFilter) filters.type = typeFilter;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
     dispatch(fetchPayments(filters));
     dispatch(customerThunks.fetchAll());
     dispatch(supplierThunks.fetchAll());
-  }, [dispatch, streamFilter, typeFilter]);
+  }, [dispatch, streamFilter, typeFilter, startDate, endDate, page]);
 
   // Fetch unpaid invoices when party or stream changes
   useEffect(() => {
@@ -129,6 +135,13 @@ const Payments = () => {
         date: new Date().toISOString().split('T')[0],
       });
       setAllocations({});
+      
+      const filters = { page, limit: 15 };
+      if (streamFilter) filters.stream = streamFilter;
+      if (typeFilter) filters.type = typeFilter;
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
+      dispatch(fetchPayments(filters));
     }
   };
 
@@ -159,16 +172,34 @@ const Payments = () => {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <select value={streamFilter} onChange={(e) => setStreamFilter(e.target.value)} className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+        <select value={streamFilter} onChange={(e) => { setStreamFilter(e.target.value); setPage(1); }} className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
           <option value="">All Streams</option>
           <option value="TAX">TAX</option>
           <option value="ESTIMATE">ESTIMATE</option>
         </select>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
           <option value="">All Types</option>
           <option value="RECEIPT">Receipts (Money In)</option>
           <option value="PAYMENT">Payments (Money Out)</option>
         </select>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
       </div>
 
       {/* Table */}
@@ -232,6 +263,7 @@ const Payments = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
 
       {/* Modal */}

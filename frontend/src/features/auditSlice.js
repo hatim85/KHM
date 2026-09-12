@@ -15,9 +15,7 @@ const auditSlice = createSlice({
   name: 'audit',
   initialState: {
     data: [],
-    total: 0,
-    page: 1,
-    pages: 1,
+    pagination: null,
     loading: false,
     error: null,
   },
@@ -27,10 +25,8 @@ const auditSlice = createSlice({
       .addCase(fetchAuditLogs.pending, (state) => { state.loading = true; state.error = null; })
       .addCase(fetchAuditLogs.fulfilled, (state, action) => {
         state.loading = false;
-        state.data = action.payload.data;
-        state.total = action.payload.total;
-        state.page = action.payload.page;
-        state.pages = action.payload.pages;
+        state.data = action.payload.data || action.payload;
+        state.pagination = action.payload.pagination || null;
       })
       .addCase(fetchAuditLogs.rejected, (state, action) => { state.loading = false; state.error = action.payload; });
   },

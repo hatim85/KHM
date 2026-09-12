@@ -24,18 +24,39 @@ const NOTE_CONFIG = Object.freeze({
 
 export const getNotes = async (req, res, next) => {
   try {
-    const { noteType, status, partyId } = req.query;
-    let query = Note.find()
-      .populate('customer', 'name')
-      .populate('supplier', 'name')
-      .sort({ createdAt: -1 });
-    if (noteType) query = query.where('noteType').equals(noteType);
-    if (status) query = query.where('status').equals(status);
+    const { noteType, status, partyId, page = 1, limit = 15, startDate, endDate } = req.query;
+    let match = {};
+    if (noteType) match.noteType = noteType;
+    if (status) match.status = status;
     if (partyId) {
-      query = query.or([{ customer: partyId }, { supplier: partyId }]);
+      match.$or = [{ customer: partyId }, { supplier: partyId }];
     }
-    const notes = await query.limit(200);
-    res.json({ success: true, count: notes.length, data: notes });
+    if (startDate || endDate) {
+      match.createdAt = {};
+      if (startDate) match.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = end;
+      }
+    }
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
+    const [notes, total] = await Promise.all([
+      Note.find(match)
+        .populate('customer', 'name')
+        .populate('supplier', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit),
+      Note.countDocuments(match)
+    ]);
+    res.json({
+      success: true,
+      data: notes,
+      pagination: { total, page: parsedPage, limit: parsedLimit, totalPages: Math.ceil(total / parsedLimit) }
+    });
   } catch (error) {
     next(error);
   }

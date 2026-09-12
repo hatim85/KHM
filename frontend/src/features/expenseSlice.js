@@ -60,7 +60,7 @@ export const fetchExpenses = createAsyncThunk(
     try {
       const params = new URLSearchParams(filters).toString();
       const response = await api.get(`/expenses?${params}`);
-      return response.data.data;
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch expenses');
     }
@@ -116,6 +116,7 @@ const expenseSlice = createSlice({
     },
     expensesList: {
       data: [],
+      pagination: null,
       loading: false,
       error: null,
     }
@@ -158,7 +159,8 @@ const expenseSlice = createSlice({
       })
       .addCase(fetchExpenses.fulfilled, (state, action) => {
         state.expensesList.loading = false;
-        state.expensesList.data = action.payload;
+        state.expensesList.data = action.payload.data || action.payload;
+        state.expensesList.pagination = action.payload.pagination || null;
       })
       .addCase(fetchExpenses.rejected, (state, action) => {
         state.expensesList.loading = false;

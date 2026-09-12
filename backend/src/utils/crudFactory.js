@@ -35,27 +35,50 @@ const crudFactory = (Model, modelName = 'Document', populateFields = [], options
   return {
     getAll: async (req, res, next) => {
       try {
-        let query = Model.find();
-        
-        // Handle search by name (generic)
-        if (req.query.search) {
-          query = query.find({ name: { $regex: req.query.search, $options: 'i' } });
+        const { search, isActive, page, limit } = req.query;
+        let match = {};
+
+        if (search) {
+          match.name = { $regex: search, $options: 'i' };
         }
 
-        // Handle active/inactive filter
-        if (req.query.isActive !== undefined) {
-          query = query.find({ isActive: req.query.isActive === 'true' });
+        if (isActive !== undefined) {
+          match.isActive = isActive === 'true';
         }
+
+        let query = Model.find(match);
 
         if (populateFields.length > 0) {
           populateFields.forEach(field => query.populate(field));
         }
 
-        // Sorting
         query.sort({ createdAt: -1 });
 
-        const docs = await query;
-        res.json({ success: true, count: docs.length, data: docs });
+        // Apply pagination if page and limit are provided, else return all (for backward compatibility during migration)
+        if (page && limit) {
+          const parsedPage = parseInt(page, 10);
+          const parsedLimit = parseInt(limit, 10);
+          const skip = (parsedPage - 1) * parsedLimit;
+          
+          const [docs, total] = await Promise.all([
+            query.skip(skip).limit(parsedLimit).exec(),
+            Model.countDocuments(match)
+          ]);
+          
+          res.json({
+            success: true,
+            data: docs,
+            pagination: {
+              total,
+              page: parsedPage,
+              limit: parsedLimit,
+              totalPages: Math.ceil(total / parsedLimit)
+            }
+          });
+        } else {
+          const docs = await query.exec();
+          res.json({ success: true, count: docs.length, data: docs });
+        }
       } catch (error) {
         next(error);
       }

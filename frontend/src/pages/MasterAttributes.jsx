@@ -2,11 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { categoryThunks, brandThunks, unitThunks } from '../features/masterDataSlice';
 import { PlusIcon, TagIcon, XIcon, BoxesIcon, RulerIcon } from '../components/icons';
+import Pagination from '../components/Pagination';
+
+const PAGE_SIZE = 15;
 
 const MasterAttributes = () => {
   const dispatch = useDispatch();
-  const [activeTab, setActiveTab] = useState('categories'); // 'categories' | 'brands' | 'units'
+  const [activeTab, setActiveTab] = useState('categories');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   // Redux state
   const categories = useSelector((state) => state.masterData.categories);
@@ -123,6 +127,12 @@ const MasterAttributes = () => {
       ? brands.error
       : units.error;
 
+  const totalPages = Math.ceil(currentList.length / PAGE_SIZE);
+  const paginatedList = currentList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const fakePagination = currentList.length > 0
+    ? { total: currentList.length, page, limit: PAGE_SIZE, totalPages }
+    : null;
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -152,6 +162,7 @@ const MasterAttributes = () => {
           onClick={() => {
             setActiveTab('categories');
             setSearch('');
+            setPage(1);
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
             activeTab === 'categories'
@@ -169,6 +180,7 @@ const MasterAttributes = () => {
           onClick={() => {
             setActiveTab('brands');
             setSearch('');
+            setPage(1);
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
             activeTab === 'brands'
@@ -186,6 +198,7 @@ const MasterAttributes = () => {
           onClick={() => {
             setActiveTab('units');
             setSearch('');
+            setPage(1);
           }}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition ${
             activeTab === 'units'
@@ -206,7 +219,7 @@ const MasterAttributes = () => {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder={`Search ${activeTab}...`}
             className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition"
           />
@@ -268,7 +281,7 @@ const MasterAttributes = () => {
                   </td>
                 </tr>
               ) : (
-                currentList.map((item) => (
+                paginatedList.map((item) => (
                   <tr key={item._id} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
                     <td className="py-4 px-6 text-sm font-semibold text-slate-900 dark:text-white">
                       {item.name}
@@ -318,6 +331,7 @@ const MasterAttributes = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={fakePagination} onPageChange={setPage} />
       </div>
 
       {/* Modal Dialog */}

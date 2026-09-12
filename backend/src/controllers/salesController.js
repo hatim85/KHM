@@ -23,18 +23,52 @@ const __dirname = path.dirname(__filename);
 
 export const getSales = async (req, res, next) => {
   try {
-    const { stream, status, paymentStatus, billType } = req.query;
-    let query = Sale.find().populate('customer', 'name').sort({ createdAt: -1 });
-
-    if (stream) query = query.where('transactionType').equals(stream);
-    if (status) query = query.where('status').equals(status);
-    if (paymentStatus) query = query.where('paymentStatus').equals(paymentStatus);
+    const { stream, status, paymentStatus, billType, page = 1, limit = 15, startDate, endDate, sortBy = 'invoiceDate', sortDesc = 'true' } = req.query;
+    
+    let match = {};
+    if (stream) match.transactionType = stream;
+    if (status) match.status = status;
+    if (paymentStatus) match.paymentStatus = paymentStatus;
     if (billType && ['TAX_INVOICE', 'BILL_OF_SUPPLY'].includes(billType)) {
-      query = query.where('billType').equals(billType);
+      match.billType = billType;
+    }
+    
+    if (startDate || endDate) {
+      match.invoiceDate = {};
+      if (startDate) match.invoiceDate.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.invoiceDate.$lte = end;
+      }
     }
 
-    const sales = await query;
-    res.json({ success: true, count: sales.length, data: sales });
+    const sortOrder = sortDesc === 'true' ? -1 : 1;
+    const sort = { [sortBy]: sortOrder };
+    
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [sales, total] = await Promise.all([
+      Sale.find(match)
+        .populate('customer', 'name gstin')
+        .sort(sort)
+        .skip(skip)
+        .limit(parsedLimit),
+      Sale.countDocuments(match)
+    ]);
+
+    res.json({
+      success: true,
+      data: sales,
+      pagination: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(total / parsedLimit)
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -176,6 +210,7 @@ const createSaleDocument = async ({
         stream: transactionType,
         referenceDocument: sale._id,
         referenceModel: 'Sale',
+        buyer: customerId,
       }, session);
     }
 
@@ -880,12 +915,12 @@ export const generateCustomPdf = async (req, res, next) => {
         else taxableLines.push(item);
       }
 
-      if (!resolvedBillType) {
-        if (exemptLines.length > 0 && taxableLines.length === 0) {
-          resolvedBillType = 'BILL_OF_SUPPLY';
-        } else {
-          resolvedBillType = 'TAX_INVOICE';
-        }
+      if (exemptLines.length > 0 && taxableLines.length === 0) {
+        resolvedBillType = 'BILL_OF_SUPPLY';
+      } else if (taxableLines.length > 0 && exemptLines.length === 0) {
+        resolvedBillType = 'TAX_INVOICE';
+      } else if (!resolvedBillType) {
+        resolvedBillType = 'TAX_INVOICE'; // Default for mixed if none provided
       }
 
       // If mixed items, select appropriate partition based on resolvedBillType

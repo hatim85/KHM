@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchSettings, fetchSequencePreview, updateBusinessSettings, updateSequenceSettings, clearSettingsError, resetUpdateSuccess, triggerBackup, clearBackupResult } from '../features/settingsSlice';
+import { fetchSettings, fetchSequencePreview, updateBusinessSettings, updateSequenceSettings, clearSettingsError, resetUpdateSuccess, triggerBackup, clearBackupResult, fetchDriveStatus, testDriveConnection, clearDriveTestResult } from '../features/settingsSlice';
 import { GST_STATES } from '../utils/gstStates';
 import { AlertTriangleIcon, CheckIcon, CloudUploadIcon, XIcon } from '../components/icons';
 import UserManagement from '../components/UserManagement';
+import { useSearchParams } from 'react-router-dom';
 
 // Backend document-type keys (PREFIX-FYMMDD-SEQ, per-day 001–999 series).
 const SEQUENCE_ROWS = [
@@ -25,8 +26,9 @@ const TIMEZONE_OPTIONS = [
 
 const Settings = () => {
   const dispatch = useDispatch();
-  const { data, loading, error, updateSuccess, backupLoading, backupResult, sequencePreview, previewLoading } = useSelector((state) => state.settings);
+  const { data, loading, error, updateSuccess, backupLoading, backupResult, sequencePreview, previewLoading, driveStatus, driveStatusLoading, testResult, testLoading } = useSelector((state) => state.settings);
   const { user } = useSelector((state) => state.auth);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const isAdmin = user?.role === 'Admin';
 
@@ -43,7 +45,17 @@ const Settings = () => {
   useEffect(() => {
     dispatch(fetchSettings());
     dispatch(fetchSequencePreview());
-  }, [dispatch]);
+    if (isAdmin) dispatch(fetchDriveStatus());
+  }, [dispatch, isAdmin]);
+
+  // Handle ?google=connected redirect from OAuth callback
+  useEffect(() => {
+    if (searchParams.get('google') === 'connected') {
+      dispatch(fetchDriveStatus());
+      searchParams.delete('google');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, dispatch]);
 
   useEffect(() => {
     if (data) {
@@ -143,6 +155,11 @@ const Settings = () => {
     }
   };
 
+  const handleTestConnection = () => {
+    dispatch(clearDriveTestResult());
+    dispatch(testDriveConnection());
+  };
+
   if (!data && loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -153,6 +170,42 @@ const Settings = () => {
 
   const inputClass = (editable) =>
     `w-full bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition ${editable ? '' : 'opacity-70'}`;
+
+  // Drive status badge rendering
+  const renderDriveStatusBadge = () => {
+    if (driveStatusLoading) {
+      return (
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+          <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-sm">Checking...</span>
+        </div>
+      );
+    }
+    if (!driveStatus) return null;
+
+    if (driveStatus.status === 'connected') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+          <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Connected</span>
+        </div>
+      );
+    }
+    if (driveStatus.status === 'auth_required') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></div>
+          <span className="text-sm font-medium text-amber-600 dark:text-amber-400">Authorization Required</span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <div className="w-2.5 h-2.5 rounded-full bg-slate-400"></div>
+        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Not Connected</span>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -383,22 +436,45 @@ const Settings = () => {
         )}
       </form>
 
-      {/* System Backups Section (Admin Only) */}
+      {/* ============ SECTION C: SYSTEM BACKUPS ============ */}
       {isAdmin && (
-        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden mt-8">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/20">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">System Backups</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Automated backups run daily at 10 PM to Google Drive.</p>
+        <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/20 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">System Backups</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Automated backups run daily at 10 PM to Google Drive.</p>
+            </div>
+            {renderDriveStatusBadge()}
           </div>
-          <div className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-slate-700 dark:text-slate-200">Manual Cloud Backup</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Force an immediate full database snapshot to Google Drive.</p>
+          <div className="p-6 space-y-5">
+            {/* Auth Required Warning */}
+            {driveStatus?.status === 'auth_required' && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                <AlertTriangleIcon size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Google Drive Authorization Required</p>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-1">{driveStatus.message}</p>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-400/80 mt-1">Automated backups will fail until you reconnect. Click the button below to re-authorize.</p>
+                </div>
               </div>
+            )}
+
+            {driveStatus?.status === 'not_configured' && (
+              <div className="p-4 rounded-xl bg-slate-500/10 border border-slate-500/30 flex items-start gap-3">
+                <AlertTriangleIcon size={18} className="text-slate-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Google Drive Not Connected</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{driveStatus.message}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons Row */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Backup Now Button */}
               <button
                 onClick={handleBackup}
-                disabled={backupLoading}
+                disabled={backupLoading || driveStatus?.status !== 'connected'}
                 type="button"
                 className="px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2 border border-slate-300 dark:border-slate-700"
               >
@@ -409,12 +485,89 @@ const Settings = () => {
                 )}
                 {backupLoading ? 'Backing up...' : 'Backup Now'}
               </button>
+
+              {/* Reconnect / Connect Google Drive */}
+              {(driveStatus?.status === 'auth_required' || driveStatus?.status === 'not_configured') && (
+                <a
+                  href="/api/settings/google/auth"
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 shadow-md shadow-blue-600/20"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.545 10.239v3.821h5.445c-.712 2.315-2.647 3.972-5.445 3.972a6.033 6.033 0 110-12.064c1.498 0 2.866.549 3.921 1.453l2.814-2.814A9.969 9.969 0 0012.545 2C7.021 2 2.543 6.477 2.543 12s4.478 10 10.002 10c8.396 0 10.249-7.85 9.426-11.748l-9.426-.013z"/></svg>
+                  {driveStatus?.status === 'auth_required' ? 'Reconnect Google Drive' : 'Connect Google Drive'}
+                </a>
+              )}
+
+              {/* Test Connection Button */}
+              {driveStatus?.status === 'connected' && (
+                <button
+                  onClick={handleTestConnection}
+                  disabled={testLoading}
+                  type="button"
+                  className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center gap-2 border border-emerald-500/30"
+                >
+                  {testLoading ? (
+                    <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <CheckIcon size={16} />
+                  )}
+                  {testLoading ? 'Testing...' : 'Test Connection'}
+                </button>
+              )}
+
+              {/* Refresh Status */}
+              <button
+                onClick={() => dispatch(fetchDriveStatus())}
+                disabled={driveStatusLoading}
+                type="button"
+                className="px-3 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-sm transition disabled:opacity-50"
+                title="Refresh status"
+              >
+                ↻ Refresh
+              </button>
             </div>
 
+            {/* Backup Result */}
             {backupResult && (
-              <div className={`mt-4 p-3 rounded-lg border text-sm flex justify-between items-center ${backupResult.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
+              <div className={`p-3 rounded-lg border text-sm flex justify-between items-center ${backupResult.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-300'}`}>
                 <span>{backupResult.message}</span>
                 <button onClick={() => dispatch(clearBackupResult())} className="opacity-70 hover:opacity-100" title="Dismiss"><XIcon size={16} /></button>
+              </div>
+            )}
+
+            {/* Test Connection Result */}
+            {testResult && (
+              <div className={`p-4 rounded-xl border text-sm ${testResult.success ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                {testResult.success ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CheckIcon size={16} className="text-emerald-500" />
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">Connection Successful</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                      <div className="bg-white/5 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">Drive Account</p>
+                        <p className="text-sm font-mono text-slate-700 dark:text-slate-300 mt-0.5">{testResult.driveUser}</p>
+                      </div>
+                      <div className="bg-white/5 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">Backup Files</p>
+                        <p className="text-sm font-mono text-slate-700 dark:text-slate-300 mt-0.5">{testResult.backupCount} found</p>
+                      </div>
+                      {testResult.lastBackup && (
+                        <div className="bg-white/5 dark:bg-slate-800/40 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wider">Last Backup</p>
+                          <p className="text-xs font-mono text-slate-700 dark:text-slate-300 mt-0.5">{new Date(testResult.lastBackup.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                          <p className="text-[10px] text-slate-500">{testResult.lastBackup.sizeMB} MB</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-400">
+                    <XIcon size={16} />
+                    <span>{testResult.error}</span>
+                  </div>
+                )}
+                <button onClick={() => dispatch(clearDriveTestResult())} className="mt-2 text-xs text-slate-500 hover:text-slate-400">Dismiss</button>
               </div>
             )}
           </div>

@@ -11,15 +11,56 @@ import { applyStockAdjustment } from '../services/inventoryService.js';
  */
 export const getStockMovements = async (req, res, next) => {
   try {
-    const { stream, product, type } = req.query;
-    let query = StockMovement.find().populate('product', 'name sku').sort({ createdAt: -1 });
+    const { stream, product, type, page = 1, limit = 15, startDate, endDate } = req.query;
+    
+    let match = {};
+    if (stream) match.stream = stream;
+    if (type) match.type = type;
+    if (product) match.product = new mongoose.Types.ObjectId(product);
+    
+    if (startDate || endDate) {
+      match.createdAt = {};
+      if (startDate) match.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = end;
+      }
+    }
 
-    if (stream) query = query.where('stream').equals(stream);
-    if (type) query = query.where('type').equals(type);
-    if (product) query = query.where('product').equals(product);
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const skip = (parsedPage - 1) * parsedLimit;
 
-    const movements = await query;
-    res.json({ success: true, count: movements.length, data: movements });
+    const [movements, total] = await Promise.all([
+      StockMovement.find(match)
+        .populate('product', 'name sku')
+        .populate('buyer', 'name phone')
+        .populate('supplier', 'name phone')
+        .populate({
+          path: 'referenceDocument',
+          select: 'invoiceNumber billNumber returnNumber customer supplier',
+          populate: [
+            { path: 'customer', select: 'name phone', strictPopulate: false },
+            { path: 'supplier', select: 'name phone', strictPopulate: false }
+          ]
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit),
+      StockMovement.countDocuments(match)
+    ]);
+
+    res.json({
+      success: true,
+      data: movements,
+      pagination: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        totalPages: Math.ceil(total / parsedLimit)
+      }
+    });
   } catch (error) {
     next(error);
   }

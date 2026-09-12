@@ -9,8 +9,12 @@ export const fetchNotes = createAsyncThunk(
       if (filters?.noteType) params.append('noteType', filters.noteType);
       if (filters?.status) params.append('status', filters.status);
       if (filters?.partyId) params.append('partyId', filters.partyId);
+      if (filters?.page) params.append('page', filters.page);
+      if (filters?.limit) params.append('limit', filters.limit);
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
       const response = await api.get(`/notes?${params.toString()}`);
-      return response.data.data;
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch notes');
     }
@@ -57,6 +61,7 @@ const notesSlice = createSlice({
   name: 'notes',
   initialState: {
     data: [],
+    pagination: null,
     originals: [],
     loading: false,
     error: null,
@@ -78,7 +83,8 @@ const notesSlice = createSlice({
       })
       .addCase(fetchNotes.fulfilled, (state, action) => {
         state.loading = false;
-        state.data = action.payload;
+        state.data = action.payload.data || action.payload;
+        state.pagination = action.payload.pagination || null;
       })
       .addCase(fetchNotes.rejected, (state, action) => {
         state.loading = false;

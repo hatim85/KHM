@@ -524,10 +524,10 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
           
           <div class="meta-column">
           <div class="invoice-meta-section">
-             <div class="section-label">${isEstimate ? 'Estimate Details' : 'Invoice Details'}</div>
+             <div class="section-label">Invoice Details</div>
              <table style="width: 100%; font-size: 13px; line-height: 1.6; color: #475569;">
                 <tr>
-                  <td style="font-weight: 600; width: 45%;">${isEstimate ? 'Estimate No:' : 'Invoice No:'}</td>
+                  <td style="font-weight: 600; width: 45%;">Invoice No:</td>
                   <td style="font-weight: 700; color: #0f172a;">${sale.invoiceNumber}</td>
                 </tr>
                 <tr>

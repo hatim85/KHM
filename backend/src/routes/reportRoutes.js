@@ -14,7 +14,8 @@ import {
   getCustomerSales,
   getCustomerEstimates,
   getPurchaseReport,
-  getExpenseReport
+  getExpenseReport,
+  getDashboardStats
 } from '../controllers/reportController.js';
 
 const router = express.Router();
@@ -40,5 +41,6 @@ router.get('/customers/estimates', getCustomerEstimates);
 // Global / Combined Reports
 router.get('/purchases', getPurchaseReport);
 router.get('/expenses', getExpenseReport);
+router.get('/dashboard-stats', getDashboardStats);
 
 export default router;

@@ -83,6 +83,34 @@ export const triggerBackup = createAsyncThunk(  'settings/triggerBackup',
   }
 );
 
+export const fetchDriveStatus = createAsyncThunk(
+  'settings/fetchDriveStatus',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/settings/google/status');
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to check Drive status'
+      );
+    }
+  }
+);
+
+export const testDriveConnection = createAsyncThunk(
+  'settings/testDriveConnection',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/settings/google/test');
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || 'Failed to test Drive connection'
+      );
+    }
+  }
+);
+
 const settingsSlice = createSlice({
   name: 'settings',
   initialState: {
@@ -94,6 +122,10 @@ const settingsSlice = createSlice({
     updateSuccess: false,
     backupLoading: false,
     backupResult: null,
+    driveStatus: null,
+    driveStatusLoading: false,
+    testResult: null,
+    testLoading: false,
   },
   reducers: {
     clearSettingsError: (state) => {
@@ -104,6 +136,9 @@ const settingsSlice = createSlice({
     },
     clearBackupResult: (state) => {
       state.backupResult = null;
+    },
+    clearDriveTestResult: (state) => {
+      state.testResult = null;
     }
   },
   extraReducers: (builder) => {
@@ -191,9 +226,34 @@ const settingsSlice = createSlice({
       .addCase(triggerBackup.rejected, (state, action) => {
         state.backupLoading = false;
         state.backupResult = { success: false, message: action.payload };
+      })
+      // Drive status check
+      .addCase(fetchDriveStatus.pending, (state) => {
+        state.driveStatusLoading = true;
+      })
+      .addCase(fetchDriveStatus.fulfilled, (state, action) => {
+        state.driveStatusLoading = false;
+        state.driveStatus = action.payload;
+      })
+      .addCase(fetchDriveStatus.rejected, (state, action) => {
+        state.driveStatusLoading = false;
+        state.driveStatus = { status: 'auth_required', message: action.payload };
+      })
+      // Test Drive connection
+      .addCase(testDriveConnection.pending, (state) => {
+        state.testLoading = true;
+        state.testResult = null;
+      })
+      .addCase(testDriveConnection.fulfilled, (state, action) => {
+        state.testLoading = false;
+        state.testResult = action.payload;
+      })
+      .addCase(testDriveConnection.rejected, (state, action) => {
+        state.testLoading = false;
+        state.testResult = { success: false, error: action.payload };
       });
   },
 });
 
-export const { clearSettingsError, resetUpdateSuccess, clearBackupResult } = settingsSlice.actions;
+export const { clearSettingsError, resetUpdateSuccess, clearBackupResult, clearDriveTestResult } = settingsSlice.actions;
 export default settingsSlice.reducer;

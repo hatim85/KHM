@@ -6,28 +6,34 @@ import { PlusIcon, XIcon } from '../components/icons';
 import { fetchSales } from '../features/salesSlice';
 import { fetchPurchases } from '../features/purchaseSlice';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
 
 const Returns = () => {
   const dispatch = useDispatch();
-  const { data: returns, loading, error } = useSelector((state) => state.returns);
+  const { data: returns, pagination, loading, error } = useSelector((state) => state.returns);
   const { data: sales } = useSelector((state) => state.sales);
   const { data: purchases } = useSelector((state) => state.purchases);
   const { returnable } = useSelector((state) => state.returns);
 
   const [tab, setTab] = useState('SALES_RETURN');
   const [streamFilter, setStreamFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [originalId, setOriginalId] = useState('');
   const [qtys, setQtys] = useState({});
   const [reason, setReason] = useState('');
 
   useEffect(() => {
-    const filters = { returnType: tab };
+    const filters = { returnType: tab, page, limit: 15 };
     if (streamFilter) filters.stream = streamFilter;
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
     dispatch(fetchReturns(filters));
     dispatch(fetchSales({}));
     dispatch(fetchPurchases({}));
-  }, [dispatch, tab, streamFilter]);
+  }, [dispatch, tab, streamFilter, startDate, endDate, page]);
 
   useEffect(() => {
     if (!originalId) return;
@@ -61,8 +67,10 @@ const Returns = () => {
       : await dispatch(createPurchaseReturn({ ...payload, purchaseId: originalId }));
     if (!result.error) {
       setShowModal(false);
-      const filters = { returnType: tab };
+      const filters = { returnType: tab, page, limit: 15 };
       if (streamFilter) filters.stream = streamFilter;
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
       dispatch(fetchReturns(filters));
     }
   };
@@ -89,7 +97,7 @@ const Returns = () => {
           {['SALES_RETURN', 'PURCHASE_RETURN'].map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => { setTab(t); setPage(1); }}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
                 tab === t ? 'bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/40' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
               }`}
@@ -102,13 +110,31 @@ const Returns = () => {
           <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Stream</label>
           <select
             value={streamFilter}
-            onChange={(e) => setStreamFilter(e.target.value)}
+            onChange={(e) => { setStreamFilter(e.target.value); setPage(1); }}
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
           >
             <option value="">TAX + Estimate</option>
             <option value="TAX">Tax only</option>
             <option value="ESTIMATE">Estimate only</option>
           </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
         </div>
       </div>
 
@@ -169,6 +195,7 @@ const Returns = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
 
       {showModal && (

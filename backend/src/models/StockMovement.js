@@ -42,13 +42,24 @@ const stockMovementSchema = new mongoose.Schema({
   },
   referenceDocument: {
     type: mongoose.Schema.Types.ObjectId,
+    refPath: 'referenceModel',
     required: true,
-    // e.g., Purchase ID or Sale ID
+    // e.g., Purchase ID or Sale ID. refPath enables dynamic .populate() via referenceModel.
+  },
+  buyer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Customer',
+    default: null,
+  },
+  supplier: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier',
+    default: null,
   },
   referenceModel: {
     type: String,
     required: true,
-    // e.g. 'Purchase' or 'Sale'
+    // 'Sale' | 'Purchase' | 'Return' | 'ManualAdjustment'
   },
   remarks: {
     type: String,

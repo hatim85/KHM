@@ -4,10 +4,11 @@ import api from '../api';
 const createCrudThunks = (entityName, endpoint) => ({
   fetchAll: createAsyncThunk(
     `masterData/${entityName}/fetchAll`,
-    async (_, { rejectWithValue }) => {
+    async (filters = {}, { rejectWithValue }) => {
       try {
-        const response = await api.get(`/master/${endpoint}`);
-        return response.data.data;
+        const params = new URLSearchParams(filters).toString();
+        const response = await api.get(`/master/${endpoint}?${params}`);
+        return response.data;
       } catch (error) {
         return rejectWithValue(error.response?.data?.message || `Failed to fetch ${entityName}`);
       }
@@ -57,6 +58,7 @@ export const productThunks = createCrudThunks('products', 'products');
 
 const createEntityState = () => ({
   data: [],
+  pagination: null,
   loading: false,
   error: null,
 });
@@ -69,7 +71,8 @@ const handleEntityReducers = (builder, thunks, entityKey) => {
     })
     .addCase(thunks.fetchAll.fulfilled, (state, action) => {
       state[entityKey].loading = false;
-      state[entityKey].data = action.payload;
+      state[entityKey].data = action.payload.data || action.payload;
+      state[entityKey].pagination = action.payload.pagination || null;
     })
     .addCase(thunks.fetchAll.rejected, (state, action) => {
       state[entityKey].loading = false;

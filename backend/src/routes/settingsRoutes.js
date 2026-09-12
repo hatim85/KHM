@@ -1,6 +1,6 @@
 import express from 'express';
 const router = express.Router();
-import { getSettings, updateSettings, updateBusinessSettings, updateSequenceSettings, previewSequences, triggerBackup, googleAuth, googleCallback } from '../controllers/settingsController.js';
+import { getSettings, updateSettings, updateBusinessSettings, updateSequenceSettings, previewSequences, triggerBackup, googleAuth, googleCallback, getDriveStatus, testDrive } from '../controllers/settingsController.js';
 import { protect, authorize  } from '../middlewares/authMiddleware.js';
 
 // Get settings - Accessible by any logged-in user
@@ -25,5 +25,11 @@ router.get('/google/auth', protect, authorize('settings.manage'), googleAuth);
 
 // Google OAuth callback - Public (Google redirects here, no auth cookie present)
 router.get('/google/callback', googleCallback);
+
+// Google Drive status check (real API probe)
+router.get('/google/status', protect, authorize('settings.manage'), getDriveStatus);
+
+// Google Drive test connection
+router.post('/google/test', protect, authorize('settings.manage'), testDrive);
 
 export default router;

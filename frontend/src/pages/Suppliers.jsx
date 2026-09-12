@@ -1,15 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import { supplierThunks } from '../features/masterDataSlice';
 import { GST_STATES } from '../utils/gstStates';
 import { PlusIcon, XIcon } from '../components/icons';
+import Pagination from '../components/Pagination';
+
+const PAGE_SIZE = 15;
 
 const Suppliers = () => {
   const dispatch = useDispatch();
   const { data, loading, error } = useSelector((state) => state.masterData.suppliers);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return data;
+    return data.filter(s =>
+      s.name?.toLowerCase().includes(q) ||
+      s.phone?.toLowerCase().includes(q) ||
+      s.email?.toLowerCase().includes(q) ||
+      s.gstin?.toLowerCase().includes(q)
+    );
+  }, [data, search]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const fakePagination = filtered.length > 0 ? { total: filtered.length, page, limit: PAGE_SIZE, totalPages } : null;
   
   const [formData, setFormData] = useState({
     name: '',
@@ -69,12 +89,21 @@ const Suppliers = () => {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Suppliers</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage your supplier database and GSTINs.</p>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
-        >
-          <PlusIcon size={16} /> Add Supplier
-        </button>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Search name, phone, GSTIN..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 w-64"
+          />
+          <button
+            onClick={() => openModal()}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition shadow-lg shadow-indigo-500/30 active:scale-95 flex items-center gap-2"
+          >
+            <PlusIcon size={16} /> Add Supplier
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -101,12 +130,12 @@ const Suppliers = () => {
                 <tr>
                   <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">Loading suppliers...</td>
                 </tr>
-              ) : data.length === 0 ? (
+              ) : paginated.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">No suppliers found.</td>
+                  <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">{search ? 'No suppliers match your search.' : 'No suppliers found.'}</td>
                 </tr>
               ) : (
-                data.map((supplier) => (
+                paginated.map((supplier) => (
                   <tr key={supplier._id} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
                     <td className="py-4 px-6">
                       <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{supplier.name}</p>
@@ -136,6 +165,7 @@ const Suppliers = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={fakePagination} onPageChange={setPage} />
       </div>
 
       {/* Modal */}

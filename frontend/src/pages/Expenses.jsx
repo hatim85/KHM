@@ -4,13 +4,18 @@ import { fetchExpenses, fetchExpenseCategories, createExpense, deleteExpenseCate
 import { formatMoney } from '../utils/formatters';
 import { SettingsIcon, PlusIcon, XIcon } from '../components/icons';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
 
 const Expenses = () => {
   const dispatch = useDispatch();
 
   const { expensesList, categories } = useSelector((state) => state.expenses);
-  const { data: expenses, loading: expensesLoading } = expensesList;
+  const { data: expenses, pagination, loading: expensesLoading } = expensesList;
   const { data: catData } = categories;
+
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [page, setPage] = useState(1);
 
   // Expense Modal State
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -28,9 +33,12 @@ const Expenses = () => {
   const [catForm, setCatForm] = useState({ name: '', isActive: true });
 
   useEffect(() => {
-    dispatch(fetchExpenses({}));
+    const filters = { page, limit: 15 };
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+    dispatch(fetchExpenses(filters));
     dispatch(fetchExpenseCategories());
-  }, [dispatch]);
+  }, [dispatch, startDate, endDate, page]);
 
   const handleExpenseSubmit = async (e) => {
     e.preventDefault();
@@ -41,6 +49,11 @@ const Expenses = () => {
     await dispatch(createExpense(payload));
     setShowExpenseModal(false);
     setExpenseForm({ date: new Date().toISOString().split('T')[0], category: '', amount: '', paymentMode: 'CASH', referenceNumber: '', notes: '' });
+    
+    const filters = { page, limit: 15 };
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+    dispatch(fetchExpenses(filters));
   };
 
   const handleCatSubmit = async (e) => {
@@ -53,6 +66,10 @@ const Expenses = () => {
   const handleDeleteExpense = async (id) => {
     if (window.confirm('Are you sure you want to delete this expense record?')) {
       await dispatch(deleteExpense(id));
+      const filters = { page, limit: 15 };
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
+      dispatch(fetchExpenses(filters));
     }
   };
 
@@ -86,6 +103,27 @@ const Expenses = () => {
           >
             <PlusIcon size={16} /> Record Expense
           </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Start</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">End</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+            className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
         </div>
       </div>
 
@@ -138,6 +176,7 @@ const Expenses = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={setPage} />
       </div>
 
       {/* Record Expense Modal */}

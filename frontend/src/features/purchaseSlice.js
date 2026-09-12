@@ -8,9 +8,15 @@ export const fetchPurchases = createAsyncThunk(
       const params = new URLSearchParams();
       if (filters?.stream) params.append('stream', filters.stream);
       if (filters?.status) params.append('status', filters.status);
+      if (filters?.page) params.append('page', filters.page);
+      if (filters?.limit) params.append('limit', filters.limit);
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.sortBy) params.append('sortBy', filters.sortBy);
+      if (filters?.sortDesc !== undefined) params.append('sortDesc', filters.sortDesc);
       
       const response = await api.get(`/purchases?${params.toString()}`);
-      return response.data.data;
+      return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch purchases');
     }
@@ -33,6 +39,7 @@ const purchaseSlice = createSlice({
   name: 'purchases',
   initialState: {
     data: [],
+    pagination: null,
     loading: false,
     error: null,
     createSuccess: false,
@@ -50,7 +57,8 @@ const purchaseSlice = createSlice({
       })
       .addCase(fetchPurchases.fulfilled, (state, action) => {
         state.loading = false;
-        state.data = action.payload;
+        state.data = action.payload.data || action.payload; // Fallback
+        state.pagination = action.payload.pagination || null;
       })
       .addCase(fetchPurchases.rejected, (state, action) => {
         state.loading = false;
