@@ -26,7 +26,11 @@ export const initBackupCron = () => {
         console.error('[Cron] Scheduled backup failed:', error);
       }
     }
-  });
+  },
+    {
+      timezone: 'Asia/Kolkata'
+    }
+  );
 
   console.log(
     '[Cron] Database backup schedule initialized (Daily at 10:00 PM).'

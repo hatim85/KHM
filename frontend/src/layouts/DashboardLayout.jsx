@@ -199,20 +199,23 @@ const DashboardLayout = () => {
                     </div>
                   </div>
                 ) : (
-                  <NavLink
-                    to={item.path}
-                    end={item.path === '/'}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                        isActive
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
-                      }`
-                    }
-                  >
-                    <item.Icon size={18} className="shrink-0" />
-                    {(sidebarOpen || mobileMenuOpen) && <span>{item.label}</span>}
-                  </NavLink>
+                  <>
+                    {item.label === 'REPORTS' && <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800" />}
+                    <NavLink
+                      to={item.path}
+                      end={item.path === '/'}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
+                        }`
+                      }
+                    >
+                      <item.Icon size={18} className="shrink-0" />
+                      {(sidebarOpen || mobileMenuOpen) && <span>{item.label}</span>}
+                    </NavLink>
+                  </>
                 )}
               </div>
             ))}

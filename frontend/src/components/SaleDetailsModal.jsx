@@ -60,6 +60,7 @@ const SaleDetailsModal = ({ sale, onClose }) => {
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 truncate">
               {new Date(sale.invoiceDate).toLocaleDateString('en-IN')} &bull; Customer: {sale.customerSnapshot?.name || sale.customer?.name || 'Unknown'}
+              {(sale.customerSnapshot?.gstin || sale.customer?.gstin) && ` (GST: ${sale.customerSnapshot?.gstin || sale.customer?.gstin})`}
               {sale.billType === 'BILL_OF_SUPPLY' && <span className="ml-2 text-emerald-500">(Bill of Supply)</span>}
             </p>
           </div>

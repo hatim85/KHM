@@ -21,6 +21,7 @@ const LedgerView = () => {
   const [streamFilter, setStreamFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [sortOrder, setSortOrder] = useState('newest');
   const [page, setPage] = useState(1);
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [selectedModel, setSelectedModel] = useState('');
@@ -36,18 +37,24 @@ const LedgerView = () => {
   }, [dispatch, partyType, partyId, streamFilter, isCustomer]);
 
   const filtered = useMemo(() => {
-    if (!startDate && !endDate) return ledger;
-    return ledger.filter(entry => {
-      const d = new Date(entry.createdAt);
-      if (startDate && d < new Date(startDate)) return false;
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (d > end) return false;
-      }
-      return true;
-    });
-  }, [ledger, startDate, endDate]);
+    let result = ledger;
+    if (startDate || endDate) {
+      result = result.filter(entry => {
+        const d = new Date(entry.createdAt);
+        if (startDate && d < new Date(startDate)) return false;
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (d > end) return false;
+        }
+        return true;
+      });
+    }
+    if (sortOrder === 'newest') {
+      return [...result].reverse();
+    }
+    return result;
+  }, [ledger, startDate, endDate, sortOrder]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -124,6 +131,13 @@ const LedgerView = () => {
             Clear dates
           </button>
         )}
+        <div className="flex items-center gap-2 w-full sm:w-auto ml-auto">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider min-w-[36px]">Sort</label>
+          <select value={sortOrder} onChange={(e) => { setSortOrder(e.target.value); setPage(1); }} className="w-full sm:w-auto bg-white dark:bg-slate-950/60 border border-slate-300 dark:border-slate-700/70 focus:border-indigo-500 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none appearance-none">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+          </select>
+        </div>
       </div>
 
       {error && (

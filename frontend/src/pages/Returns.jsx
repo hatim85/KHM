@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { fetchReturns, fetchReturnable, createSalesReturn, createPurchaseReturn } from '../features/returnsSlice';
 import { PlusIcon, XIcon } from '../components/icons';
 import { fetchSales } from '../features/salesSlice';
@@ -11,13 +11,21 @@ import { usePopup } from '../context/PopupContext';
 
 const Returns = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
+  const queryType = new URLSearchParams(location.search).get('type');
   const { showAlert } = usePopup();
   const { data: returns, pagination, loading, error } = useSelector((state) => state.returns);
   const { data: sales } = useSelector((state) => state.sales);
   const { data: purchases } = useSelector((state) => state.purchases);
   const { returnable } = useSelector((state) => state.returns);
 
-  const [tab, setTab] = useState('SALES_RETURN');
+  const [tab, setTab] = useState(queryType === 'PURCHASE_RETURN' ? 'PURCHASE_RETURN' : 'SALES_RETURN');
+
+  useEffect(() => {
+    if (queryType === 'PURCHASE_RETURN' || queryType === 'SALES_RETURN') {
+      setTab(queryType);
+    }
+  }, [queryType]);
   const [streamFilter, setStreamFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
