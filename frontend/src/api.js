@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'https://khm-erp.duckdns.org/api',
   withCredentials: true, // Required for HttpOnly cookies
   headers: {
     'Content-Type': 'application/json',
