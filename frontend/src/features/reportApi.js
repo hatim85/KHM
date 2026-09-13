@@ -3,7 +3,8 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 export const reportApi = createApi({
   reducerPath: 'reportApi',
   baseQuery: fetchBaseQuery({
-    baseUrl: '/api/reports',
+    baseUrl: 'https://khm-erp.duckdns.org/api/reports',
+    credentials: 'include',
   }),
   tagTypes: ['Report'],
   endpoints: (builder) => ({
