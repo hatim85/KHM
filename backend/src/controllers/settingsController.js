@@ -243,7 +243,7 @@ const googleCallback = async (req, res, next) => {
     await exchangeAndStoreTokens(code);
 
     // Redirect back to the frontend Settings page so admin sees "Connected" immediately
-    res.redirect('/settings?google=connected');
+    res.redirect(`${process.env.FRONTEND_URL}/settings?google=connected`);
   } catch (error) {
     next(new ApiError(500, `Google OAuth callback failed: ${error.message}`));
   }
