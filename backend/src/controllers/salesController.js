@@ -614,7 +614,7 @@ export const convertEstimateToTax = async (req, res, next) => {
         financialYear: generated.fy,
         sourceEstimateId: estimate._id,
         invoiceDate: new Date(),
-        items: p.lines,
+        items: p.processedItems,
         subTotal: p.subTotal,
         totalCgst: p.totalCgst,
         totalSgst: p.totalSgst,

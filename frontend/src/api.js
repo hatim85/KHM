@@ -8,10 +8,14 @@ const api = axios.create({
   },
 });
 
-// Response interceptor to handle 401 (token expired / unauthenticated)
+// Response interceptor to handle 401 and 429
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Rate limited — surface a clean message
+    if (error.response && error.response.status === 429) {
+      error.message = error.response.data?.message || 'Too many requests. Please slow down.';
+    }
     if (error.response && error.response.status === 401) {
       // Don't loop or log out if the 401 is on an auth endpoint
       if (!error.config?.url?.includes('/auth/')) {

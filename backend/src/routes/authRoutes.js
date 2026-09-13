@@ -21,6 +21,12 @@ import {
   verifyOtpValidator,
   resetPasswordValidator,
 } from '../validators/authValidator.js';
+import {
+  loginLimiter,
+  forgotPasswordLimiter,
+  verifyOtpLimiter,
+  resetPasswordLimiter,
+} from '../middlewares/rateLimiter.js';
 
 // Admin only middleware
 const adminOnly = (req, res, next) => {
@@ -31,10 +37,10 @@ const adminOnly = (req, res, next) => {
 };
 
 // Public routes
-router.post('/login', loginValidator, loginUser);
-router.post('/forgot-password', forgotPasswordValidator, forgotPassword);
-router.post('/verify-otp', verifyOtpValidator, verifyOtp);
-router.post('/reset-password', resetPasswordValidator, resetPassword);
+router.post('/login', loginLimiter, loginValidator, loginUser);
+router.post('/forgot-password', forgotPasswordLimiter, forgotPasswordValidator, forgotPassword);
+router.post('/verify-otp', verifyOtpLimiter, verifyOtpValidator, verifyOtp);
+router.post('/reset-password', resetPasswordLimiter, resetPasswordValidator, resetPassword);
 
 // Protected routes
 router.post('/logout', protect, logoutUser);

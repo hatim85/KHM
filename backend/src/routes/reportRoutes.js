@@ -17,10 +17,12 @@ import {
   getExpenseReport,
   getDashboardStats
 } from '../controllers/reportController.js';
+import { reportsLimiter } from '../middlewares/rateLimiter.js';
 
 const router = express.Router();
 
 router.use(protect);
+router.use(reportsLimiter); // 60 req / 15 min per IP
 
 // TAX Stream Reports
 router.get('/pnl', getProfitAndLoss);

@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import connectDB from './config/db.js';
 import errorHandler from './middlewares/errorHandler.js';
+import { globalLimiter, mutationLimiter } from './middlewares/rateLimiter.js';
 
 // Routes
 import authRoutes from './routes/authRoutes.js';
@@ -21,6 +22,8 @@ import expenseRoutes from './routes/expenseRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import { initBackupCron } from './jobs/backupCron.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Connect to database
 connectDB().then(() => {
@@ -29,6 +32,8 @@ connectDB().then(() => {
 });
 
 const app = express();
+
+app.set('trust proxy', 1);
 
 // Security and middleware
 app.use(helmet());
@@ -40,8 +45,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +59,17 @@ app.use('/pdfs', helmet.crossOriginResourcePolicy({ policy: "cross-origin" }), e
 // Health check
 app.get('/', (req, res) => {
   res.json({ message: 'KHM ERP API is running' });
+});
+
+// Rate limiting
+app.use('/api', globalLimiter);    // 300 req / 15 min per IP
+// 100 write ops / 15 min per IP
+app.use('/api', (req, res, next) => {
+  const mutationMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+  if (mutationMethods.includes(req.method)) {
+    return mutationLimiter(req, res, next);
+  }
+  next();
 });
 
 // API Routes

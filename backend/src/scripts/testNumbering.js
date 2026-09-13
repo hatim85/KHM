@@ -98,8 +98,8 @@ await test('login works', async () => {
 await test('FY boundaries: Mar 31 → prior FY, Apr 1 → new FY', async () => {
   assert(getFinancialYearStart(ist(2026, 3, 31, 23, 59), 'Asia/Kolkata') === 2025, 'Mar 31 2026 → FY 2025');
   assert(getFinancialYearStart(ist(2026, 4, 1, 0, 0), 'Asia/Kolkata') === 2026, 'Apr 1 2026 → FY 2026');
-  assert(getFinancialYearCode(2026) === '2627', 'FY 2026-27 code is 2627');
-  assert(getFinancialYearCode(2027) === '2728', 'FY 2027-28 code is 2728');
+  assert(getFinancialYearCode(2026) === '26-27', 'FY 2026-27 code is 26-27');
+  assert(getFinancialYearCode(2027) === '27-28', 'FY 2027-28 code is 27-28');
 });
 
 await test('business date parts honor the business timezone', async () => {
@@ -112,54 +112,53 @@ await test('business date parts honor the business timezone', async () => {
 });
 
 // ---------------- spec examples ----------------
-await test('spec examples: 06 Sep 2026 → INV-26270906-001/-002, next day resets', async () => {
+await test('spec examples: 06 Sep 2026 → INV/26-27/00001/-00002', async () => {
   const a = await getNextDocumentNumber('TAX', ist(2026, 9, 6));
-  assert(a.number === 'INV-26270906-001', `got ${a.number}`);
-  assert(a.fy === 2026 && a.fyCode === '2627' && a.mmdd === '0906' && a.seq === 1, 'parts decoded');
+  assert(a.number === 'INV/26-27/00001', `got ${a.number}`);
+  assert(a.fy === 2026 && a.fyCode === '26-27' && a.seq === 1, 'parts decoded');
   assert(isNewDocumentNumber(a.number), 'matches production regex');
   const b = await getNextDocumentNumber('TAX', ist(2026, 9, 6));
-  assert(b.number === 'INV-26270906-002', `got ${b.number}`);
+  assert(b.number === 'INV/26-27/00002', `got ${b.number}`);
   const c = await getNextDocumentNumber('TAX', ist(2026, 9, 7));
-  assert(c.number === 'INV-26270907-001', `reset on new date: ${c.number}`);
+  assert(c.number === 'INV/26-27/00003', `continues on new date: ${c.number}`);
 });
 
 await test('spec examples: Jan/Mar/Apr boundaries', async () => {
-  // Isolate from earlier buckets by using dedicated prefixes per call? No —
-  // same INV series, fresh dates, so each must be 001 of its own date.
   const jan = await getNextDocumentNumber('TAX', ist(2027, 1, 1));
-  assert(jan.number === 'INV-26270101-001', `got ${jan.number}`);
+  assert(jan.number === 'INV/26-27/00004', `got ${jan.number}`);
   const mar = await getNextDocumentNumber('TAX', ist(2027, 3, 31));
-  assert(mar.number === 'INV-26270331-001', `got ${mar.number}`);
+  assert(mar.number === 'INV/26-27/00005', `got ${mar.number}`);
   const apr = await getNextDocumentNumber('TAX', ist(2027, 4, 1));
-  assert(apr.number === 'INV-27280401-001', `FY rollover: ${apr.number}`);
-  assert(apr.fy === 2027 && apr.fyCode === '2728', 'rolled FY parts');
+  assert(apr.number === 'INV/27-28/00001', `FY rollover: ${apr.number}`);
+  assert(apr.fy === 2027 && apr.fyCode === '27-28', 'rolled FY parts');
 });
 
 await test('sequences are isolated per document type and per series', async () => {
   const inv = await getNextDocumentNumber('TAX', ist(2026, 10, 5));
   const bos = await getNextDocumentNumber('SUPPLY', ist(2026, 10, 5));
-  assert(inv.number === 'INV-26271005-001' && bos.number === 'BOS-26271005-001', `${inv.number} / ${bos.number}`);
+  assert(inv.number === 'INV/26-27/00006' && bos.number === 'BOS/26-27/00001', `${inv.number} / ${bos.number}`);
   const rec = await getNextDocumentNumber('RECEIPT', ist(2026, 10, 5));
-  assert(rec.number === 'REC-26271005-001', `got ${rec.number}`);
+  assert(rec.number === 'REC/26-27/00001', `got ${rec.number}`);
   const cn = await getNextDocumentNumber('CREDIT_NOTE', ist(2026, 10, 5));
   const dn = await getNextDocumentNumber('DEBIT_NOTE', ist(2026, 10, 5));
-  assert(cn.number === 'CN-26271005-001' && dn.number === 'DN-26271005-001', `${cn.number} / ${dn.number}`);
+  assert(cn.number === 'CN/26-27/00001' && dn.number === 'DN/26-27/00001', `${cn.number} / ${dn.number}`);
 });
 
-await test('999/day ceiling: 1000th allocation fails, never issues …-1000', async () => {
+await test('99999/year ceiling: 100000th allocation fails, never issues …-100000', async () => {
   const day = ist(2026, 11, 11);
-  await DocumentCounter.create({ _id: `PAYMENT:PAY-:2627:20261111`, seq: MAX_DAILY_SEQUENCE });
-  assert(MAX_DAILY_SEQUENCE === 999, 'ceiling constant is 999');
+  const { MAX_YEARLY_SEQUENCE } = await import('../utils/documentNumbering.js');
+  await DocumentCounter.create({ _id: `PAYMENT:PAY-:26-27`, seq: MAX_YEARLY_SEQUENCE });
+  assert(MAX_YEARLY_SEQUENCE === 99999, 'ceiling constant is 99999');
   let threw = null;
   try {
     await getNextDocumentNumber('PAYMENT', day);
   } catch (e) { threw = e; }
   assert(threw && threw.statusCode === 409, `admin 409 error, got ${threw?.statusCode}: ${threw?.message}`);
   assert(/another series/i.test(threw.message), 'error demands another series');
-  const peek = await peekNextSequence('PAYMENT', 'PAY-', '2627', '20261111');
-  assert(peek === 1001, `counter parked past ceiling (peek ${peek}) — 1000 never formatted`);
+  const peek = await peekNextSequence('PAYMENT', 'PAY-', '26-27');
+  assert(peek === 100001, `counter parked past ceiling (peek ${peek}) — 100000 never formatted`);
   const all = await DocumentCounter.find({ _id: /PAYMENT:PAY/ });
-  assert(!all.some((c) => String(c.seq).padStart(3, '0') === '1000' && false), 'sanity');
+  assert(!all.some((c) => String(c.seq).padStart(5, '0') === '100000' && false), 'sanity');
 });
 
 await test('20 parallel allocations → 20 unique sequential numbers', async () => {
@@ -169,7 +168,7 @@ await test('20 parallel allocations → 20 unique sequential numbers', async () 
   assert(new Set(numbers).size === 20, `all unique: ${numbers.join(',')}`);
   const seqs = out.map((o) => o.seq).sort((x, y) => x - y);
   assert(seqs[0] === 1 && seqs[19] === 20, `1..20, got ${seqs.join(',')}`);
-  assert(numbers.every((n) => n.startsWith('EST-26271201-')), 'same FYMMDD bucket');
+  assert(numbers.every((n) => n.startsWith('EST/26-27/')), 'same FY bucket');
 });
 
 await test('preview endpoint shows FY, date, next seq and preview without consuming', async () => {
@@ -177,7 +176,7 @@ await test('preview endpoint shows FY, date, next seq and preview without consum
   assertStatus(r, 200, 'preview');
   for (const key of ['TAX', 'SUPPLY', 'ESTIMATE', 'SALES_RETURN', 'PURCHASE_RETURN', 'CREDIT_NOTE', 'DEBIT_NOTE', 'RECEIPT', 'PAYMENT']) {
     const row = r.body.data[key];
-    assert(row && row.prefix && row.fyCode && row.mmdd && row.nextSeq >= 1, `${key} row complete`);
+    assert(row && row.prefix && row.fyCode && row.nextSeq >= 1, `${key} row complete`);
     if (!row.exhausted) assert(isNewDocumentNumber(row.preview), `${key} preview format ${row.preview}`);
   }
   const before = r.body.data.TAX.nextSeq;
@@ -263,15 +262,15 @@ await test('mixed GST sale splits into INV + BOS of the same date bucket', async
   const tax = r.body.splitBills.find((b) => b.billType === 'TAX_INVOICE');
   const bos = r.body.splitBills.find((b) => b.billType === 'BILL_OF_SUPPLY');
   assert(tax && bos, 'one of each kind');
-  const taxDate = tax.invoiceNumber.slice(4, 12);
-  assert(bos.invoiceNumber === `BOS-${taxDate}-001` || /^BOS-\d{8}-001$/.test(bos.invoiceNumber), `BOS same bucket: ${tax.invoiceNumber} / ${bos.invoiceNumber}`);
-  assert(tax.invoiceNumber.slice(4, 12) === bos.invoiceNumber.slice(4, 12), 'same FYMMDD bucket');
+  const taxDate = tax.invoiceNumber.slice(4, 9);
+  assert(bos.invoiceNumber === `BOS/26-27/00002` || /^BOS\/\d{2}-\d{2}\/00002$/.test(bos.invoiceNumber), `BOS same bucket: ${tax.invoiceNumber} / ${bos.invoiceNumber}`);
+  assert(tax.invoiceNumber.slice(4, 9) === bos.invoiceNumber.slice(4, 9), 'same FY bucket');
   assert(bos.totalCgst === 0 && bos.totalSgst === 0 && bos.totalIgst === 0, 'BOS tax-free');
   assert(String(tax.splitGroupId) === String(bos.splitGroupId), 'linked pair');
 });
 
 await test('duplicate documentNumber rejected by uniqueness constraint', async () => {
-  const dup = 'CN-26270906-001';
+  const dup = 'CN/26-27/00002';
   const base = {
     noteType: 'CREDIT_NOTE', documentNumber: dup, noteDate: new Date(), documentDate: new Date(),
     financialYear: 2026, partyType: 'Customer', customer: custId,
@@ -310,7 +309,7 @@ await test('CN: free-form partial credit posts ledger + shrinks outstanding', as
   });
   assertStatus(r, 201, 'credit note');
   const note = r.body.data;
-  assert(/^CN-\d{8}-\d{3}$/.test(note.documentNumber), `CN number ${note.documentNumber}`);
+  assert(/^CN\/\d{2}-\d{2}\/\d{5}$/.test(note.documentNumber), `CN number ${note.documentNumber}`);
   assert(note.grandTotal === 11800, `CN total 10000+18% = ${note.grandTotal}`);
   assert(note.originalDocumentNumber === saleNumber, 'original number linked');
   const sale = await Sale.findById(saleId);
@@ -368,7 +367,7 @@ await test('DN: purchase upward adjustment posts supplier ledger + raises ITC', 
     items: [{ description: 'Rate difference', quantity: 1, rate: 10000, gstRate: 18 }],
   });
   assertStatus(r, 201, 'debit note');
-  assert(/^DN-\d{8}-\d{3}$/.test(r.body.data.documentNumber), `DN number ${r.body.data.documentNumber}`);
+  assert(/^DN\/\d{2}-\d{2}\/\d{5}$/.test(r.body.data.documentNumber), `DN number ${r.body.data.documentNumber}`);
   const ledger = await SupplierLedger.findOne({ referenceDocument: r.body.data._id });
   assert(ledger && ledger.credit === 11800 && ledger.transactionType === 'DEBIT_NOTE', 'supplier ledger credit posted');
   const after = await admin.get('/api/reports/gst');
@@ -392,7 +391,7 @@ await test('SR and CN stay separate concepts (return creates no note)', async ()
     items: [{ product: productId, quantity: 1 }],
   });
   assertStatus(ret, 201, 'sales return');
-  assert(/^SR-\d{8}-\d{3}$/.test(ret.body.data.returnNumber), `SR number ${ret.body.data.returnNumber}`);
+  assert(/^SR\/\d{2}-\d{2}\/\d{5}$/.test(ret.body.data.returnNumber), `SR number ${ret.body.data.returnNumber}`);
   assert(ret.body.data.documentDate, 'return documentDate stored');
   assert((await Note.countDocuments()) === notesBefore, 'no auto-created note');
 });

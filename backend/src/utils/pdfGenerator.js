@@ -47,8 +47,8 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
 
   // Generate QR Code data URI
   const qrCodeDataUri = saleData.transactionType === 'ESTIMATE'
-  ? null
-  : await QRCode.toDataURL(publicUrl, { width: 100, margin: 1 });
+    ? null
+    : await QRCode.toDataURL(publicUrl, { width: 100, margin: 1 });
 
   // 1. Generate HTML Content
   const htmlContent = generateHTML(saleData, companySettings, qrCodeDataUri);
@@ -279,7 +279,7 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
       const prod = prodOf(item);
       const grossTaxable = item.taxableValue; // baseValue without discount
       const taxRate = item.gstRate || 0;
-      
+
       const displayTaxAmount = Math.round(grossTaxable * (taxRate / 100));
       const displayIgst = displayTaxAmount;
       const displayCgst = Math.round(displayTaxAmount / 2);
@@ -636,11 +636,11 @@ const generateHTML = (sale, companySettings, qrCodeDataUri) => {
             ` : ''}
             ${!isEstimate && !isBillOfSupply && !hasIgst ? `
             <tr>
-              <td class="label">${mainGstRate ? `CGST @ ${mainGstRate/2}%:` : 'Total CGST:'}</td>
+              <td class="label">${mainGstRate ? `CGST @ ${mainGstRate / 2}%:` : 'Total CGST:'}</td>
               <td>₹${formatMoney(sale.totalCgst)}</td>
             </tr>
             <tr>
-              <td class="label">${mainGstRate ? `SGST @ ${mainGstRate/2}%:` : 'Total SGST:'}</td>
+              <td class="label">${mainGstRate ? `SGST @ ${mainGstRate / 2}%:` : 'Total SGST:'}</td>
               <td>₹${formatMoney(sale.totalSgst)}</td>
             </tr>
             ` : ''}

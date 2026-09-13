@@ -163,6 +163,7 @@ const forgotPassword = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     user.resetOtp = await bcrypt.hash(otp, salt);
     user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.resetOtpAttempts = 0; // Reset failed attempts counter
     await user.save();
 
     // Send via Brevo
@@ -199,18 +200,38 @@ const verifyOtp = async (req, res, next) => {
       // Clear expired OTP
       user.resetOtp = null;
       user.resetOtpExpires = null;
+      user.resetOtpAttempts = 0;
       await user.save();
       throw new ApiError(400, 'OTP has expired. Please request a new one.', 'OTP_EXPIRED');
     }
 
+    if (user.resetOtpAttempts >= 5) {
+      user.resetOtp = null;
+      user.resetOtpExpires = null;
+      user.resetOtpAttempts = 0;
+      await user.save();
+      throw new ApiError(400, 'Too many incorrect attempts. OTP invalidated. Please request a new one.', 'OTP_ATTEMPTS_EXCEEDED');
+    }
+
     const isValid = await bcrypt.compare(otp, user.resetOtp);
     if (!isValid) {
-      throw new ApiError(400, 'Invalid OTP. Please check and try again.', 'INVALID_OTP');
+      user.resetOtpAttempts = (user.resetOtpAttempts || 0) + 1;
+      const attemptsLeft = 5 - user.resetOtpAttempts;
+      if (attemptsLeft <= 0) {
+        user.resetOtp = null;
+        user.resetOtpExpires = null;
+        user.resetOtpAttempts = 0;
+        await user.save();
+        throw new ApiError(400, 'Too many incorrect attempts. OTP invalidated. Please request a new one.', 'OTP_ATTEMPTS_EXCEEDED');
+      }
+      await user.save();
+      throw new ApiError(400, `Invalid OTP. Please check and try again. (${attemptsLeft} attempts remaining)`, 'INVALID_OTP');
     }
 
     // OTP is valid — clear it so it can't be reused
     user.resetOtp = null;
     user.resetOtpExpires = null;
+    user.resetOtpAttempts = 0;
     await user.save();
 
     // Issue a short-lived reset token (15 min)

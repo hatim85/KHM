@@ -2,6 +2,7 @@ import express from 'express';
 const router = express.Router();
 import { getSettings, updateSettings, updateBusinessSettings, updateSequenceSettings, previewSequences, triggerBackup, googleAuth, googleCallback, getDriveStatus, testDrive } from '../controllers/settingsController.js';
 import { protect, authorize  } from '../middlewares/authMiddleware.js';
+import { backupLimiter } from '../middlewares/rateLimiter.js';
 
 // Get settings - Accessible by any logged-in user
 router.get('/', protect, getSettings);
@@ -17,8 +18,8 @@ router.put('/sequences', protect, authorize('settings.manage'), updateSequenceSe
 // Preview next FY-aware numbers without consuming them
 router.get('/sequences/preview', protect, previewSequences);
 
-// Manually trigger backup
-router.post('/backup', protect, authorize('settings.manage'), triggerBackup);
+// Manually trigger backup (2 req / hour)
+router.post('/backup', protect, authorize('settings.manage'), backupLimiter, triggerBackup);
 
 // Google Drive OAuth - One-time setup (Admin only)
 router.get('/google/auth', protect, authorize('settings.manage'), googleAuth);

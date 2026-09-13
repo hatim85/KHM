@@ -126,13 +126,13 @@ const resolveSettings = async () => {
  * counter document and each receives a distinct sequence.
  *
  * Resolves prefix + timezone from CompanySettings (override via opts).
- * The sequence bucket is keyed on the DOCUMENT date (not "now"), so
- * backdated documents consume that date's series.
+ * The sequence bucket is keyed on the financial year derived from the
+ * document date.
  *
- * Throws 409 when the day's series is exhausted (999 used) — an admin must
- * configure another series (prefix); the ceiling value 1000 is never issued.
+ * Throws 409 when the FY series is exhausted (99999 used) — an admin must
+ * configure another series (prefix); the ceiling value 100000 is never issued.
  *
- * Returns { number, prefix, fy, fyCode, fyLabel, dateKey, mmdd, seq, documentDate }.
+ * Returns { number, prefix, fy, fyCode, fyLabel, seq, documentDate }.
  */
 export const getNextDocumentNumber = async (docType, refDate = new Date(), opts = {}) => {
   const config = DOCUMENT_TYPES[docType];

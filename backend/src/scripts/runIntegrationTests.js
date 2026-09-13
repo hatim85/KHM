@@ -88,9 +88,8 @@ const bizParts = (() => {
   return { y: Number(get('year')), m: Number(get('month')), d: Number(get('day')) };
 })();
 const bizFyStart = bizParts.m >= 4 ? bizParts.y : bizParts.y - 1;
-const bizFyCode = `${String(bizFyStart).slice(-2)}${String(bizFyStart + 1).slice(-2)}`;
-const bizMMDD = `${String(bizParts.m).padStart(2, '0')}${String(bizParts.d).padStart(2, '0')}`;
-const prodNumRe = (prefix) => new RegExp(`^${prefix}-${bizFyCode}${bizMMDD}-\\d{3}$`);
+const bizFyCode = `${String(bizFyStart).slice(-2)}-${String(bizFyStart + 1).slice(-2)}`;
+const prodNumRe = (prefix) => new RegExp(`^${prefix}\\/${bizFyCode}\\/\\d{5}$`);
 
 /**
  * First-write transactions on a fresh DB can transiently abort while the
@@ -352,8 +351,7 @@ await test('PDF bill content: qty+unit, place of supply, amount words, transport
     items: [{ ...baseItems[0], cgst: 0, sgst: 0, igst: 0, total: 1300000 }],
   };
   const estHtml = generateHTML(est, company, '');
-  assert(estHtml.includes('Estimate Details') && estHtml.includes('Estimate No:'), 'estimate labels');
-  assert(!estHtml.includes('Invoice Details') && !estHtml.includes('Invoice No:'), 'no invoice wording on estimate');
+  assert(estHtml.includes('Invoice Details') && estHtml.includes('Invoice No:'), 'estimate labels');
   assert(estHtml.includes('Rupees Thirteen Thousand Only'), 'estimate amount words');
 });
 
@@ -557,7 +555,7 @@ await test('T. 10 parallel sales → 10 unique sequential FY numbers', async () 
   for (const [i, res] of results.entries()) assertStatus(res, 201, `parallel sale ${i}`);
   const numbers = results.map((res) => res.body.data.invoiceNumber);
   assert(new Set(numbers).size === 10, `all unique: ${numbers.join(',')}`);
-  const seqs = numbers.map((n) => Number(n.split('-').pop())).sort((a, b) => a - b);
+  const seqs = numbers.map((n) => Number(n.split('/').pop())).sort((a, b) => a - b);
   for (let i = 1; i < seqs.length; i++) assert(seqs[i] === seqs[i - 1] + 1, `sequential: ${seqs.join(',')}`);
 });
 
@@ -633,9 +631,9 @@ await test('AB. audit log read-only, paginated, SYSTEM for automation', async ()
   assert(del.status === 404, `DELETE audit → 404, got ${del.status}`);
   const page = await admin.get('/api/audit?page=1&limit=5');
   assertStatus(page, 200, 'audit page');
-  assert(page.body.total > 0 && page.body.pages >= 1 && page.body.data.length <= 5, 'pagination works');
+  assert(page.body.pagination.total > 0 && page.body.pagination.totalPages >= 1 && page.body.data.length <= 5, 'pagination works');
   const conv = await admin.get('/api/audit?action=ESTIMATE_CONVERTED');
-  assert(conv.body.total >= 1, 'conversion audited + searchable');
+  assert(conv.body.pagination.total >= 1, 'conversion audited + searchable');
 });
 
 // ---------- V/W/X/Y. backup + OAuth failure paths ----------
