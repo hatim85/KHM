@@ -7,9 +7,11 @@ import { fetchSales } from '../features/salesSlice';
 import { fetchPurchases } from '../features/purchaseSlice';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
+import { usePopup } from '../context/PopupContext';
 
 const Returns = () => {
   const dispatch = useDispatch();
+  const { showAlert } = usePopup();
   const { data: returns, pagination, loading, error } = useSelector((state) => state.returns);
   const { data: sales } = useSelector((state) => state.sales);
   const { data: purchases } = useSelector((state) => state.purchases);
@@ -58,8 +60,8 @@ const Returns = () => {
     const items = Object.entries(qtys)
       .filter(([, q]) => Number(q) > 0)
       .map(([product, q]) => ({ product, quantity: Number(q) }));
-    if (items.length === 0) return alert('Enter a return quantity for at least one line.');
-    if (!reason.trim()) return alert('A reason is required for returns.');
+    if (items.length === 0) return showAlert('Enter a return quantity for at least one line.');
+    if (!reason.trim()) return showAlert('A reason is required for returns.');
 
     const payload = { items, reason: reason.trim() };
     const result = isSales

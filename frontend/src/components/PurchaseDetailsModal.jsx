@@ -27,6 +27,7 @@ const PurchaseDetailsModal = ({ purchase, onClose }) => {
               <thead>
                 <tr className="bg-slate-100 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800">
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Product</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase text-center">HSN</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase text-right">Qty</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase text-right">Rate</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase text-right">Tax %</th>
@@ -40,6 +41,9 @@ const PurchaseDetailsModal = ({ purchase, onClose }) => {
                     <td className="py-3 px-4 text-sm font-medium text-slate-900 dark:text-white">
                       {item.productName}
                       {item.sku && <span className="block text-xs text-slate-500 font-normal">{item.sku}</span>}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300 text-center">
+                      {item.hsnCode || '-'}
                     </td>
                     <td className="py-3 px-4 text-sm text-slate-700 dark:text-slate-300 text-right">
                       {item.quantity} {item.unitName}

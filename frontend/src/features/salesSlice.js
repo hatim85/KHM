@@ -17,6 +17,7 @@ export const fetchSales = createAsyncThunk(
       if (filters?.endDate) params.append('endDate', filters.endDate);
       if (filters?.sortBy) params.append('sortBy', filters.sortBy);
       if (filters?.sortDesc !== undefined) params.append('sortDesc', filters.sortDesc);
+      if (filters?.search) params.append('search', filters.search);
 
       const response = await api.get(`/sales?${params.toString()}`);
       return response.data;

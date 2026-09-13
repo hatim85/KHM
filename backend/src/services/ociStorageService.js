@@ -6,15 +6,19 @@ let s3ClientInstance = null;
 export const getS3Client = () => {
   if (s3ClientInstance) return s3ClientInstance;
   
-  if (!process.env.OCI_ACCESS_KEY_ID || !process.env.OCI_SECRET_ACCESS_KEY || !process.env.OCI_NAMESPACE) {
+  if (!process.env.OCI_ACCESS_KEY_ID || !process.env.OCI_SECRET_ACCESS_KEY) {
     console.warn('[OCI] Storage credentials missing. Skipping OCI S3 client initialization.');
     return null;
   }
 
   const region = process.env.OCI_REGION || 'ap-mumbai-1';
   const namespace = process.env.OCI_NAMESPACE;
-  // Use S3 compatibility API endpoint
-  const endpoint = `https://${namespace}.compat.objectstorage.${region}.oraclecloud.com`;
+  const endpoint = process.env.OCI_ENDPOINT || (namespace ? `https://${namespace}.compat.objectstorage.${region}.oraclecloud.com` : null);
+
+  if (!endpoint) {
+    console.warn('[OCI] Neither OCI_ENDPOINT nor OCI_NAMESPACE specified. Skipping OCI S3 client initialization.');
+    return null;
+  }
 
   s3ClientInstance = new S3Client({
     region: region,
@@ -26,6 +30,7 @@ export const getS3Client = () => {
     forcePathStyle: true,
   });
 
+  console.log(`[OCI] S3 client initialized with endpoint: ${endpoint}`);
   return s3ClientInstance;
 };
 

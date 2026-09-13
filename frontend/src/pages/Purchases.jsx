@@ -14,14 +14,16 @@ const Purchases = () => {
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     const filters = { page, limit: 15 };
     if (streamFilter !== 'ALL') filters.stream = streamFilter;
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
+    if (search) filters.search = search;
     dispatch(fetchPurchases(filters));
-  }, [dispatch, streamFilter, startDate, endDate, page]);
+  }, [dispatch, streamFilter, startDate, endDate, page, search]);
 
   const filteredPurchases = purchases;
 
@@ -79,6 +81,15 @@ const Purchases = () => {
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
             className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-[180px]">
+          <input
+            type="text"
+            placeholder="Search invoice no..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 placeholder:text-slate-400"
           />
         </div>
       </div>

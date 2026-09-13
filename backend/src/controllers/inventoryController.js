@@ -152,7 +152,7 @@ export const adjustStock = async (req, res, next) => {
       delta: parsedQty,
       stream,
       referenceDocument: productDoc._id,
-      referenceModel: 'ManualAdjustment',
+      referenceModel: 'Product',
       remarks: reason,
     }, session);
 

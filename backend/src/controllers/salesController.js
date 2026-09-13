@@ -23,7 +23,7 @@ const __dirname = path.dirname(__filename);
 
 export const getSales = async (req, res, next) => {
   try {
-    const { stream, status, paymentStatus, billType, page = 1, limit = 15, startDate, endDate, sortBy = 'invoiceDate', sortDesc = 'true' } = req.query;
+    const { stream, status, paymentStatus, billType, page = 1, limit = 15, startDate, endDate, sortBy = 'invoiceDate', sortDesc = 'true', search } = req.query;
     
     let match = {};
     if (stream) match.transactionType = stream;
@@ -32,6 +32,7 @@ export const getSales = async (req, res, next) => {
     if (billType && ['TAX_INVOICE', 'BILL_OF_SUPPLY'].includes(billType)) {
       match.billType = billType;
     }
+    if (search) match.invoiceNumber = { $regex: search, $options: 'i' };
     
     if (startDate || endDate) {
       match.invoiceDate = {};
@@ -231,7 +232,7 @@ const createSaleDocument = async ({
   return sale;
 };
 
-const generateSalePdf = async (sale) => {
+export const generateSalePdf = async (sale) => {
   try {
     await sale.populate('customer', 'name address gstin phone stateCode');
     await sale.populate({ path: 'items.product', select: 'name sku hsnCode unit secondaryUnit', populate: [{ path: 'unit', select: 'shortName' }, { path: 'secondaryUnit', select: 'shortName' }] });
@@ -239,8 +240,10 @@ const generateSalePdf = async (sale) => {
     const pdfMeta = await generateInvoicePDF(sale, settings);
     await Sale.findByIdAndUpdate(sale._id, { pdf: pdfMeta });
     sale.pdf = pdfMeta;
+    return pdfMeta;
   } catch (pdfError) {
-    console.error('PDF Generation failed:', pdfError);
+    console.error(`[PDF] Generation failed for sale ${sale._id || sale.invoiceNumber}:`, pdfError);
+    throw pdfError;
   }
 };
 
@@ -433,7 +436,11 @@ export const createSale = async (req, res, next) => {
     // Generate PDFs (outside the transaction — storage I/O must never hold it).
     if (status === 'COMPLETED') {
       for (const sale of created) {
-        await generateSalePdf(sale);
+        try {
+          await generateSalePdf(sale);
+        } catch (pdfErr) {
+          console.error(`[PDF] Background PDF generation failed during creation for sale ${sale._id}:`, pdfErr.message);
+        }
       }
     }
 
@@ -665,7 +672,11 @@ export const convertEstimateToTax = async (req, res, next) => {
     session.endSession();
 
     for (const invoice of converted) {
-      await generateSalePdf(invoice);
+      try {
+        await generateSalePdf(invoice);
+      } catch (pdfErr) {
+        console.error(`[PDF] Background PDF generation failed during conversion for invoice ${invoice._id}:`, pdfErr.message);
+      }
     }
 
     for (const invoice of converted) {
@@ -798,6 +809,17 @@ export const cancelSale = async (req, res, next) => {
 export const streamPdfToResponse = async (sale, res, contentDisposition) => {
   if (!sale) throw new ApiError(404, 'Sale not found');
   
+  // Self-heal: If PDF metadata is missing, generate it on demand
+  if (!sale.pdf || !sale.pdf.objectKey) {
+    console.log(`[PDF] PDF missing for sale ${sale._id} (${sale.invoiceNumber}), generating on demand...`);
+    try {
+      await generateSalePdf(sale);
+    } catch (genError) {
+      console.error(`[PDF] On-demand generation failed for sale ${sale._id}:`, genError.message);
+      throw new ApiError(500, 'Failed to generate PDF for this document');
+    }
+  }
+
   if (!sale.pdf || !sale.pdf.objectKey) {
     throw new ApiError(404, 'PDF file not yet generated or available');
   }
@@ -814,13 +836,35 @@ export const streamPdfToResponse = async (sale, res, contentDisposition) => {
       if (contentLength) res.setHeader('Content-Length', contentLength);
       stream.pipe(res);
     } catch (error) {
+      // If missing in OCI storage, attempt regeneration
+      if (error instanceof ApiError && (error.errorCode === 'FILE_NOT_FOUND' || error.statusCode === 404)) {
+        console.warn(`[PDF] File not found in OCI (${sale.pdf.objectKey}), regenerating...`);
+        try {
+          await generateSalePdf(sale);
+          const { stream, contentLength } = await getObjectStream(sale.pdf.objectKey);
+          if (contentLength) res.setHeader('Content-Length', contentLength);
+          return stream.pipe(res);
+        } catch (regenErr) {
+          console.error('[PDF] Regeneration failed after OCI 404:', regenErr.message);
+        }
+      }
       if (error instanceof ApiError) throw error;
       throw new ApiError(500, 'Error streaming PDF from storage');
     }
   } else if (sale.pdf.provider === 'local') {
-    const localPath = path.join(__dirname, '../../public/pdfs', sale.pdf.fileName || sale.pdf.objectKey);
+    let localPath = path.join(__dirname, '../../public/pdfs', sale.pdf.fileName || sale.pdf.objectKey);
     if (!fs.existsSync(localPath)) {
-      throw new ApiError(404, 'Local PDF file not found');
+      console.warn(`[PDF] Local PDF file not found (${localPath}), regenerating...`);
+      try {
+        await generateSalePdf(sale);
+        localPath = path.join(__dirname, '../../public/pdfs', sale.pdf.fileName || sale.pdf.objectKey);
+      } catch (regenErr) {
+        console.error('[PDF] Local regeneration failed:', regenErr.message);
+      }
+    }
+
+    if (!fs.existsSync(localPath)) {
+      throw new ApiError(404, 'Local PDF file not found and could not be regenerated');
     }
     const stream = fs.createReadStream(localPath);
     stream.pipe(res);

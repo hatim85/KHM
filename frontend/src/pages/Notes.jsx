@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { fetchNotes, cancelNote } from '../features/notesSlice';
 import { PlusIcon } from '../components/icons';
 import Pagination from '../components/Pagination';
+import { usePopup } from '../context/PopupContext';
 
 const Notes = () => {
   const dispatch = useDispatch();
@@ -13,6 +14,7 @@ const Notes = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
+  const { showConfirm, showAlert } = usePopup();
 
   useEffect(() => {
     const filters = { page, limit: 15 };
@@ -25,10 +27,11 @@ const Notes = () => {
 
   const handleCancel = async (note) => {
     const label = note.noteType === 'CREDIT_NOTE' ? 'credit note' : 'debit note';
-    if (!window.confirm(`Cancel ${label} ${note.documentNumber}? Its number is retained and never reused.`)) return;
+    const isConfirmed = await showConfirm(`Cancel ${label} ${note.documentNumber}? Its number is retained and never reused.`);
+    if (!isConfirmed) return;
     const result = await dispatch(cancelNote(note._id));
     if (result.error) {
-      alert(typeof result.payload === 'string' ? result.payload : 'Cancellation failed.');
+      await showAlert(typeof result.payload === 'string' ? result.payload : 'Cancellation failed.');
     } else {
       const filters = { page, limit: 15 };
       if (typeFilter) filters.noteType = typeFilter;

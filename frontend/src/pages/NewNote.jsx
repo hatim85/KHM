@@ -5,11 +5,13 @@ import { createNote, fetchNoteOriginals, clearOriginals } from '../features/note
 import { customerThunks, supplierThunks, productThunks } from '../features/masterDataSlice';
 import { ArrowLeftIcon, XIcon, PlusIcon } from '../components/icons';
 import SearchableSelect from '../components/SearchableSelect';
+import { usePopup } from '../context/PopupContext';
 
 const NewNote = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { showAlert } = usePopup();
 
   const { data: customers } = useSelector((state) => state.masterData.customers);
   const { data: suppliers } = useSelector((state) => state.masterData.suppliers);
@@ -69,9 +71,9 @@ const NewNote = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!partyId) return alert(`Please select a ${isCredit ? 'customer' : 'supplier'}.`);
-    if (!originalId) return alert('Please select the original invoice/purchase being adjusted.');
-    if (items.some((i) => !i.description.trim())) return alert('Each line needs a description.');
+    if (!partyId) return showAlert(`Please select a ${isCredit ? 'customer' : 'supplier'}.`);
+    if (!originalId) return showAlert('Please select the original invoice/purchase being adjusted.');
+    if (items.some((i) => !i.description.trim())) return showAlert('Each line needs a description.');
 
     const payload = {
       noteType,

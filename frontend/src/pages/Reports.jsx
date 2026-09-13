@@ -26,7 +26,9 @@ const Reports = () => {
   // Date range filters
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [purchStreamFilter, setPurchStreamFilter] = useState('');
   const queryParams = { startDate, endDate };
+  const purchQueryParams = { ...queryParams, stream: purchStreamFilter };
 
   // Per-table pagination state keyed by table title
   const [pageMap, setPageMap] = useState({});
@@ -53,8 +55,7 @@ const Reports = () => {
   const { data: custSalesRes, isLoading: custSalesLoading } = useGetCustomerSalesQuery(queryParams, { skip: activeTab !== 'customers' });
   const { data: custEstRes, isLoading: custEstLoading } = useGetCustomerEstimatesQuery(queryParams, { skip: activeTab !== 'customers' });
 
-  // Purchases & Expenses
-  const { data: purchRes, isLoading: purchLoading } = useGetPurchaseReportQuery(queryParams, { skip: activeTab !== 'purchases' });
+  const { data: purchRes, isLoading: purchLoading } = useGetPurchaseReportQuery(purchQueryParams, { skip: activeTab !== 'purchases' });
   const { data: expRes, isLoading: expLoading } = useGetExpenseReportQuery(queryParams, { skip: activeTab !== 'expenses' && activeTab !== 'overview' });
 
 
@@ -251,8 +252,19 @@ const Reports = () => {
         {activeTab === 'sales' && renderSales()}
         {activeTab === 'estimates' && renderEstimates()}
         {activeTab === 'purchases' && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Purchase Report</h2>
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Purchase Report</h2>
+              <select
+                value={purchStreamFilter}
+                onChange={(e) => setPurchStreamFilter(e.target.value)}
+                className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500"
+              >
+                <option value="">All Streams</option>
+                <option value="TAX">TAX Purchases</option>
+                <option value="ESTIMATE">ESTIMATE Purchases</option>
+              </select>
+            </div>
             {renderTable(purchLoading, purchRes?.data, [
               { header: 'Invoice', render: r => <div className="font-mono text-indigo-600 dark:text-indigo-400">{r.invoiceNumber}</div> },
               { header: 'Date', render: r => new Date(r.invoiceDate).toLocaleDateString() },
@@ -376,13 +388,15 @@ const Reports = () => {
             {renderTable(stockLoading, stockRes?.data?.items, [
               { header: 'Product', render: r => r.name },
               { header: 'SKU', render: r => <span className="font-mono text-xs text-slate-400">{r.sku || '—'}</span> },
-              { header: 'HSN', render: r => <span className="font-mono text-xs text-slate-400">{r.hsn || '—'}</span> },
+              { header: 'HSN', render: r => <span className="font-mono text-xs text-slate-400">{r.hsnCode || '—'}</span> },
               { header: 'TAX Qty', align: 'right', render: r => <span className="font-mono text-indigo-600 dark:text-indigo-300">{r.taxStock ?? '—'}</span> },
+              { header: 'TAX WAC', align: 'right', render: r => formatMoney(r.averageCostTax) },
+              { header: 'TAX Value', align: 'right', render: r => <span className="font-mono font-bold text-indigo-600 dark:text-indigo-300">{formatMoney(r.taxValue)}</span> },
               { header: 'EST Qty', align: 'right', render: r => <span className="font-mono text-amber-600 dark:text-amber-300">{r.estimateStock ?? '—'}</span> },
+              { header: 'EST WAC', align: 'right', render: r => formatMoney(r.averageCostEst) },
+              { header: 'EST Value', align: 'right', render: r => <span className="font-mono font-bold text-amber-600 dark:text-amber-300">{formatMoney(r.estValue)}</span> },
               { header: 'Total Qty', align: 'right', render: r => <span className="font-bold">{r.quantity}</span> },
-              { header: 'Unit', render: r => r.unit },
-              { header: 'Avg Cost (WAC)', align: 'right', render: r => formatMoney(r.averageCost) },
-              { header: 'Stock Value', align: 'right', render: r => <span className="font-mono font-bold text-slate-900 dark:text-white">{formatMoney(r.value)}</span> },
+              { header: 'Total Value', align: 'right', render: r => <span className="font-mono font-bold text-slate-900 dark:text-white">{formatMoney(r.value)}</span> },
             ], 'Stock Valuation')}
           </div>
         )}
@@ -390,13 +404,17 @@ const Reports = () => {
         {activeTab === 'receivables' && renderTable(custLoading, custRes?.data, [
           { header: 'Customer', render: r => r.name },
           { header: 'Phone', render: r => r.phone || '—' },
-          { header: 'Outstanding Balance', align: 'right', render: r => <div className="font-mono font-bold text-amber-600 dark:text-amber-400">{formatMoney(r.totalOutstanding)}</div> }
+          { header: 'Tax Balance', align: 'right', render: r => <div className="font-mono text-indigo-600 dark:text-indigo-400">{formatMoney(r.taxOutstanding)}</div> },
+          { header: 'Estimate Balance', align: 'right', render: r => <div className="font-mono text-amber-600 dark:text-amber-400">{formatMoney(r.estOutstanding)}</div> },
+          { header: 'Total Outstanding', align: 'right', render: r => <div className="font-mono font-bold text-slate-900 dark:text-white">{formatMoney(r.totalOutstanding)}</div> }
         ], 'Receivables')}
 
         {activeTab === 'payables' && renderTable(supLoading, supRes?.data, [
           { header: 'Supplier', render: r => r.name },
           { header: 'Phone', render: r => r.phone || '—' },
-          { header: 'Outstanding Balance', align: 'right', render: r => <div className="font-mono font-bold text-rose-600 dark:text-rose-400">{formatMoney(r.totalOutstanding)}</div> }
+          { header: 'Tax Balance', align: 'right', render: r => <div className="font-mono text-indigo-600 dark:text-indigo-400">{formatMoney(r.taxOutstanding)}</div> },
+          { header: 'Estimate Balance', align: 'right', render: r => <div className="font-mono text-amber-600 dark:text-amber-400">{formatMoney(r.estOutstanding)}</div> },
+          { header: 'Total Outstanding', align: 'right', render: r => <div className="font-mono font-bold text-rose-600 dark:text-rose-400">{formatMoney(r.totalOutstanding)}</div> }
         ], 'Payables')}
 
         {activeTab === 'expenses' && (

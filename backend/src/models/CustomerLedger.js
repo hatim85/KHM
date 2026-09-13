@@ -21,6 +21,7 @@ const customerLedgerSchema = new mongoose.Schema({
   referenceDocument: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
+    refPath: 'referenceModel',
   },
   referenceModel: {
     type: String,

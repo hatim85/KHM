@@ -35,10 +35,29 @@ const app = express();
 
 app.set('trust proxy', 1);
 
-// Security and middleware
-app.use(helmet());
+// CORS configuration
+const configuredFrontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : '';
+const allowedOrigins = [
+  configuredFrontendUrl,
+  'https://khm-erp.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5001',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(cleanOrigin) || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // Fallback comparison
+    if (configuredFrontendUrl && cleanOrigin === configuredFrontendUrl) {
+      return callback(null, true);
+    }
+    return callback(null, true); // Allow all or pass matching origin with credentials
+  },
   credentials: true,
 }));
 app.use(express.json());

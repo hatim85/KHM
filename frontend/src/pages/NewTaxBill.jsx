@@ -7,10 +7,13 @@ import { fetchSettings } from '../features/settingsSlice';
 import { openDB } from 'idb';
 import { AlertTriangleIcon, ArrowLeftIcon, XIcon, PlusIcon } from '../components/icons';
 import SearchableSelect from '../components/SearchableSelect';
+import { usePopup } from '../context/PopupContext';
+import api from '../api';
 
 const NewTaxBill = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { showAlert } = usePopup();
 
   const { data: customers } = useSelector(state => state.masterData.customers);
   const { data: products } = useSelector(state => state.masterData.products);
@@ -171,13 +174,13 @@ const NewTaxBill = () => {
       },
     });
     await db.add('offlineSales', { ...payload, timestamp: Date.now() });
-    alert("You are offline. The GST invoice has been saved locally and will sync when you reconnect.");
+    await showAlert("You are offline. The GST invoice has been saved locally and will sync when you reconnect.");
     navigate('/sales/tax');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (items.some(i => !i.product)) return alert("Please select a product for all rows.");
+    if (items.some(i => !i.product)) return showAlert("Please select a product for all rows.");
 
     const submissionData = {
       ...formData,
@@ -202,17 +205,17 @@ const NewTaxBill = () => {
       if (split.length > 1) {
         const tax = split.find((s) => s.billType !== 'BILL_OF_SUPPLY');
         const bos = split.find((s) => s.billType === 'BILL_OF_SUPPLY');
-        alert(`Bill split by GST as required:\n• Tax Invoice ${tax?.invoiceNumber} (GST items)\n• Bill of Supply ${bos?.invoiceNumber} (0% GST exempt items)`);
+        await showAlert(`Bill split by GST as required:\n• Tax Invoice ${tax?.invoiceNumber} (GST items)\n• Bill of Supply ${bos?.invoiceNumber} (0% GST exempt items)`);
       } else if (split[0]?.billType === 'BILL_OF_SUPPLY') {
-        alert(`All items are 0% GST — Bill of Supply ${split[0]?.invoiceNumber} created (exempt under Notification No. 12/2017-Central Tax (Rate)).`);
+        await showAlert(`All items are 0% GST — Bill of Supply ${split[0]?.invoiceNumber} created (exempt under Notification No. 12/2017-Central Tax (Rate)).`);
       }
       navigate('/sales/tax');
     }
   };
 
   const handleCustomPdfDownload = async () => {
-    if (items.some(i => !i.product)) return alert("Please select a product for all rows.");
-    if (!formData.customInvoiceNumber) return alert("Please enter an Invoice Number for the Custom PDF.");
+    if (items.some(i => !i.product)) return showAlert("Please select a product for all rows.");
+    if (!formData.customInvoiceNumber) return showAlert("Please enter an Invoice Number for the Custom PDF.");
 
     const submissionData = {
       ...formData,
@@ -231,21 +234,11 @@ const NewTaxBill = () => {
     };
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/sales/custom-pdf', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(submissionData)
+      const response = await api.post('/sales/custom-pdf', submissionData, {
+        responseType: 'blob'
       });
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || 'Failed to generate custom PDF');
-      }
       
-      const blob = await response.blob();
+      const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -256,7 +249,8 @@ const NewTaxBill = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      alert(err.message);
+      console.error('Failed to generate custom PDF:', err);
+      showAlert(err.response?.data?.message || err.message || 'Failed to generate custom PDF');
     }
   };
 

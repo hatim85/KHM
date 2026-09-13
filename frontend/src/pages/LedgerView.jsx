@@ -4,6 +4,9 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchCustomerLedger, fetchSupplierLedger } from '../features/paymentSlice';
 import { ArrowLeftIcon } from '../components/icons';
 import Pagination from '../components/Pagination';
+import SaleDetailsModal from '../components/SaleDetailsModal';
+import PurchaseDetailsModal from '../components/PurchaseDetailsModal';
+import PaymentDetailsModal from '../components/PaymentDetailsModal';
 
 const PAGE_SIZE = 15;
 
@@ -19,6 +22,8 @@ const LedgerView = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [selectedModel, setSelectedModel] = useState('');
 
   const isCustomer = partyType === 'customer';
 
@@ -138,6 +143,7 @@ const LedgerView = () => {
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Debit (₹)</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Credit (₹)</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Balance (₹)</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
@@ -183,6 +189,21 @@ const LedgerView = () => {
                         {entry.balanceAfter < 0 ? '-' : ''}₹{(Math.abs(entry.balanceAfter) / 100).toFixed(2)}
                       </span>
                     </td>
+                    <td className="py-4 px-6 text-center">
+                      {['SALE', 'PURCHASE', 'RECEIPT', 'PAYMENT'].includes(entry.transactionType) && entry.referenceDocument ? (
+                        <button 
+                          onClick={() => {
+                             setSelectedDoc(entry.referenceDocument);
+                             setSelectedModel(entry.transactionType);
+                          }} 
+                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-300 transition text-xs font-medium"
+                        >
+                          View Details
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-500">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -191,6 +212,10 @@ const LedgerView = () => {
         </div>
         <Pagination pagination={fakePagination} onPageChange={setPage} />
       </div>
+
+      {selectedModel === 'SALE' && <SaleDetailsModal sale={selectedDoc} onClose={() => { setSelectedDoc(null); setSelectedModel(''); }} />}
+      {selectedModel === 'PURCHASE' && <PurchaseDetailsModal purchase={selectedDoc} onClose={() => { setSelectedDoc(null); setSelectedModel(''); }} />}
+      {['RECEIPT', 'PAYMENT'].includes(selectedModel) && <PaymentDetailsModal payment={selectedDoc} onClose={() => { setSelectedDoc(null); setSelectedModel(''); }} />}
     </div>
   );
 };

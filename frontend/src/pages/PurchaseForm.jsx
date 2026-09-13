@@ -5,10 +5,12 @@ import { createPurchase } from '../features/purchaseSlice';
 import { supplierThunks, productThunks } from '../features/masterDataSlice';
 import { ArrowLeftIcon, XIcon, PlusIcon, CheckIcon, PencilIcon } from '../components/icons';
 import SearchableSelect from '../components/SearchableSelect';
+import { usePopup } from '../context/PopupContext';
 
 const PurchaseForm = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { showAlert } = usePopup();
 
   const { data: suppliers } = useSelector(state => state.masterData.suppliers);
   const { data: products } = useSelector(state => state.masterData.products);
@@ -93,7 +95,7 @@ const PurchaseForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (items.some(i => !i.product)) return alert("Please select a product for all rows.");
+    if (items.some(i => !i.product)) return showAlert("Please select a product for all rows.");
 
     // Convert everything to paise before sending to backend
     const submissionData = {

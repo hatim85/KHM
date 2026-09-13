@@ -234,14 +234,15 @@ export const getStockValuation = async (req, res, next) => {
         _id: p._id,
         name: p.name,
         sku: p.sku,
-        hsn: p.hsn,
+        hsnCode: p.hsnCode,
         quantity: taxQty + estQty,
         taxStock: taxQty,
         estimateStock: estQty,
         unit: p.unit?.shortName || '',
-        averageCost: taxQty + estQty > 0 ? Math.round(value / (taxQty + estQty)) : 0,
         averageCostTax: p.averageCostTax || 0,
         averageCostEst: p.averageCostEst || 0,
+        taxValue,
+        estValue,
         value
       };
     });
@@ -283,14 +284,36 @@ export const getEstimateSalesReport = async (req, res, next) => {
 // ==========================================
 export const getCustomerOutstanding = async (req, res, next) => {
   try {
-    const { stream = 'TAX' } = req.query;
     const customersAgg = await CustomerLedger.aggregate([
-      { $match: { stream } },
       { $sort: { createdAt: -1 } },
-      { $group: { _id: '$customer', latestBalance: { $first: '$balanceAfter' } } },
+      { $group: { 
+          _id: { customer: '$customer', stream: '$stream' }, 
+          latestBalance: { $first: '$balanceAfter' } 
+      }},
+      { $group: {
+          _id: '$_id.customer',
+          balances: { $push: { stream: '$_id.stream', balance: '$latestBalance' } }
+      }},
       { $lookup: { from: 'customers', localField: '_id', foreignField: '_id', as: 'customer' } },
       { $unwind: '$customer' },
-      { $project: { _id: 1, name: '$customer.name', phone: '$customer.phone', totalOutstanding: '$latestBalance' } },
+      { $project: {
+          _id: 1,
+          name: '$customer.name',
+          phone: '$customer.phone',
+          taxOutstanding: {
+            $let: {
+              vars: { taxItem: { $arrayElemAt: [{ $filter: { input: '$balances', cond: { $eq: ['$$this.stream', 'TAX'] } } }, 0] } },
+              in: { $ifNull: ['$$taxItem.balance', 0] }
+            }
+          },
+          estOutstanding: {
+            $let: {
+              vars: { estItem: { $arrayElemAt: [{ $filter: { input: '$balances', cond: { $eq: ['$$this.stream', 'ESTIMATE'] } } }, 0] } },
+              in: { $ifNull: ['$$estItem.balance', 0] }
+            }
+          }
+      }},
+      { $addFields: { totalOutstanding: { $add: ['$taxOutstanding', '$estOutstanding'] } } },
       { $sort: { totalOutstanding: -1 } }
     ]);
     res.json({ success: true, data: customersAgg });
@@ -302,14 +325,36 @@ export const getCustomerOutstanding = async (req, res, next) => {
 // ==========================================
 export const getSupplierOutstanding = async (req, res, next) => {
   try {
-    const { stream = 'TAX' } = req.query;
     const suppliersAgg = await SupplierLedger.aggregate([
-      { $match: { stream } },
       { $sort: { createdAt: -1 } },
-      { $group: { _id: '$supplier', latestBalance: { $first: '$balanceAfter' } } },
+      { $group: { 
+          _id: { supplier: '$supplier', stream: '$stream' }, 
+          latestBalance: { $first: '$balanceAfter' } 
+      }},
+      { $group: {
+          _id: '$_id.supplier',
+          balances: { $push: { stream: '$_id.stream', balance: '$latestBalance' } }
+      }},
       { $lookup: { from: 'suppliers', localField: '_id', foreignField: '_id', as: 'supplier' } },
       { $unwind: '$supplier' },
-      { $project: { _id: 1, name: '$supplier.name', phone: '$supplier.phone', totalOutstanding: '$latestBalance' } },
+      { $project: {
+          _id: 1,
+          name: '$supplier.name',
+          phone: '$supplier.phone',
+          taxOutstanding: {
+            $let: {
+              vars: { taxItem: { $arrayElemAt: [{ $filter: { input: '$balances', cond: { $eq: ['$$this.stream', 'TAX'] } } }, 0] } },
+              in: { $ifNull: ['$$taxItem.balance', 0] }
+            }
+          },
+          estOutstanding: {
+            $let: {
+              vars: { estItem: { $arrayElemAt: [{ $filter: { input: '$balances', cond: { $eq: ['$$this.stream', 'ESTIMATE'] } } }, 0] } },
+              in: { $ifNull: ['$$estItem.balance', 0] }
+            }
+          }
+      }},
+      { $addFields: { totalOutstanding: { $add: ['$taxOutstanding', '$estOutstanding'] } } },
       { $sort: { totalOutstanding: -1 } }
     ]);
     res.json({ success: true, data: suppliersAgg });
@@ -478,8 +523,9 @@ export const getCustomerEstimates = async (req, res, next) => {
 // ==========================================
 export const getPurchaseReport = async (req, res, next) => {
   try {
-    const { startDate, endDate, stream = 'TAX' } = req.query;
-    const match = { transactionType: stream, status: 'COMPLETED', ...getDateMatch(startDate, endDate, 'invoiceDate') };
+    const { startDate, endDate, stream } = req.query;
+    const match = { status: 'COMPLETED', ...getDateMatch(startDate, endDate, 'invoiceDate') };
+    if (stream) match.transactionType = stream;
 
     const purchases = await Purchase.find(match).populate('supplier', 'name').sort({ invoiceDate: -1 }).limit(100);
     res.json({ success: true, data: purchases });

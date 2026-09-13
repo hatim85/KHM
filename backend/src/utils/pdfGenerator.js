@@ -8,41 +8,17 @@ import QRCode from 'qrcode';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Lazy-initialize OCI S3 client.
-// In ESM, imports are resolved BEFORE module body code runs,
-// so process.env vars from dotenv are not available at module load time.
-// This getter ensures the client is created only when first needed.
-let _s3Client = undefined; // undefined = not yet initialized, null = no creds
-const getS3Client = () => {
-  if (_s3Client !== undefined) return _s3Client;
-
-  if (process.env.OCI_ACCESS_KEY_ID && process.env.OCI_ENDPOINT) {
-    _s3Client = new S3Client({
-      region: process.env.OCI_REGION || 'auto',
-      endpoint: process.env.OCI_ENDPOINT,
-      credentials: {
-        accessKeyId: process.env.OCI_ACCESS_KEY_ID,
-        secretAccessKey: process.env.OCI_SECRET_ACCESS_KEY,
-      },
-      forcePathStyle: true,
-    });
-    console.log('[PDF] OCI S3 client initialized successfully');
-  } else {
-    console.warn('[PDF] OCI credentials not found, PDFs will be saved locally');
-    _s3Client = null;
-  }
-  return _s3Client;
-};
+import { getS3Client } from '../services/ociStorageService.js';
 
 /**
  * Generate PDF, upload to OCI, and return the metadata.
  * Falls back to local storage only if OCI upload fails.
  */
 export const generateInvoicePDF = async (saleData, companySettings) => {
-  const fileName = `invoices/${saleData.transactionType}/${saleData.invoiceNumber}_${Date.now()}.pdf`;
+  const fileName = `invoices/${saleData.transactionType}/${saleData.invoiceNumber.replace(/[^a-zA-Z0-9-]/g, '_')}_${Date.now()}.pdf`;
 
   // Public URL for QR Code points to KHM backend public endpoint
-  const baseUrl = process.env.FRONTEND_URL;
+  const baseUrl = (process.env.BACKEND_URL || 'https://khm-erp.duckdns.org').replace(/\/$/, '');
   const publicUrl = `${baseUrl}/api/sales/${saleData._id}/pdf/public`;
 
   // Generate QR Code data URI
@@ -61,17 +37,33 @@ export const generateInvoicePDF = async (saleData, companySettings) => {
 /** Shared HTML → PDF buffer step (puppeteer). */
 export const renderPdfBuffer = async (htmlContent) => {
   const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process'
+    ],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
   });
-  const page = await browser.newPage();
-  await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-  const pdfBuffer = await page.pdf({
-    format: 'A4',
-    margin: { top: '15px', right: '20px', bottom: '15px', left: '20px' },
-    printBackground: true
-  });
-  await browser.close();
-  return pdfBuffer;
+
+  try {
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'load', timeout: 30000 });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      margin: { top: '15px', right: '20px', bottom: '15px', left: '20px' },
+      printBackground: true
+    });
+    return pdfBuffer;
+  } finally {
+    if (browser) {
+      await browser.close().catch(err => console.error('[PDF] Error closing browser:', err));
+    }
+  }
 };
 
 /** Shared upload step: OCI primary, local fallback. */

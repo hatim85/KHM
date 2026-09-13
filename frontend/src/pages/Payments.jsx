@@ -6,6 +6,7 @@ import { formatMoney } from '../utils/formatters';
 import { PlusIcon, XIcon, UndoIcon } from '../components/icons';
 import SearchableSelect from '../components/SearchableSelect';
 import Pagination from '../components/Pagination';
+import { usePopup } from '../context/PopupContext';
 
 const Payments = () => {
   const dispatch = useDispatch();
@@ -37,8 +38,11 @@ const Payments = () => {
 
   const [allocations, setAllocations] = useState({});
 
+  const { showConfirm, showAlert } = usePopup();
+
   const handleReverse = async (p) => {
-    if (!window.confirm(`Reverse ${p.type} ${p.voucherNumber}? Invoice outstanding will be restored; history is preserved.`)) return;
+    const isConfirmed = await showConfirm(`Reverse ${p.type} ${p.voucherNumber}? Invoice outstanding will be restored; history is preserved.`);
+    if (!isConfirmed) return;
     const result = await dispatch(reversePayment(p._id));
     if (!result.error) dispatch(fetchPayments({ page, limit: 15, stream: streamFilter, type: typeFilter, startDate, endDate }));
   };
@@ -215,15 +219,16 @@ const Payments = () => {
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Party</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Mode</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Amount</th>
+                <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invoices</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Reference</th>
                 <th className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {loading && payments.length === 0 ? (
-                <tr><td colSpan="9" className="py-8 text-center text-slate-500 text-sm">Loading...</td></tr>
+                <tr><td colSpan="10" className="py-8 text-center text-slate-500 text-sm">Loading...</td></tr>
               ) : payments.length === 0 ? (
-                <tr><td colSpan="9" className="py-8 text-center text-slate-500 text-sm">No payments found.</td></tr>
+                <tr><td colSpan="10" className="py-8 text-center text-slate-500 text-sm">No payments found.</td></tr>
               ) : (
                 payments.map((p) => (
                   <tr key={p._id} className="hover:bg-slate-100 dark:hover:bg-slate-800/20 transition">
@@ -246,6 +251,19 @@ const Payments = () => {
                       <span className={`text-sm font-bold font-mono ${p.type === 'RECEIPT' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         {p.type === 'RECEIPT' ? '+' : '-'}₹{(p.amount / 100).toFixed(2)}
                       </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      {p.allocations && p.allocations.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {p.allocations.map((a, i) => (
+                            <span key={i} className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-400">
+                              {a.invoiceNumber || a.invoiceId?.invoiceNumber || '—'}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-500 font-mono">{p.referenceNumber || '—'}</td>
                     <td className="py-4 px-6 text-center">

@@ -5,6 +5,7 @@ import { GST_STATES } from '../utils/gstStates';
 import { AlertTriangleIcon, CheckIcon, CloudUploadIcon, XIcon } from '../components/icons';
 import UserManagement from '../components/UserManagement';
 import { useSearchParams } from 'react-router-dom';
+import api from '../api';
 
 // Backend document-type keys (PREFIX-FYMMDD-SEQ, per-day 001–999 series).
 const SEQUENCE_ROWS = [
@@ -347,7 +348,7 @@ const Settings = () => {
         <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Document Sequences</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Production format PREFIX-FYMMDD-SEQ (e.g. INV-26270906-001). Per-day series 001–999. Numbers are never reused.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Production format PREFIX/YY-YY/SEQ (e.g. INV/26-27/00001). Per-day series 001–999. Numbers are never reused.</p>
           </div>
           {isAdmin && !editingSequences && (
             <button type="button" onClick={() => setEditingSequences(true)} className="w-full sm:w-auto px-4 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white text-sm font-medium rounded-xl transition border border-slate-300 dark:border-slate-700 text-center">
@@ -489,7 +490,7 @@ const Settings = () => {
               {/* Reconnect / Connect Google Drive */}
               {(driveStatus?.status === 'auth_required' || driveStatus?.status === 'not_configured') && (
                 <a
-                  href="/api/settings/google/auth"
+                  href={`${api.defaults.baseURL}/settings/google/auth`}
                   className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-medium rounded-lg transition flex items-center gap-2 shadow-md shadow-blue-600/20"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12.545 10.239v3.821h5.445c-.712 2.315-2.647 3.972-5.445 3.972a6.033 6.033 0 110-12.064c1.498 0 2.866.549 3.921 1.453l2.814-2.814A9.969 9.969 0 0012.545 2C7.021 2 2.543 6.477 2.543 12s4.478 10 10.002 10c8.396 0 10.249-7.85 9.426-11.748l-9.426-.013z"/></svg>

@@ -10,11 +10,12 @@ import { resolveDualQty } from '../services/lineItemService.js';
 
 export const getPurchases = async (req, res, next) => {
   try {
-    const { stream, status, page = 1, limit = 15, startDate, endDate, sortBy = 'invoiceDate', sortDesc = 'true' } = req.query;
+    const { stream, status, page = 1, limit = 15, startDate, endDate, sortBy = 'invoiceDate', sortDesc = 'true', search } = req.query;
     
     let match = {};
     if (stream) match.transactionType = stream;
     if (status) match.status = status;
+    if (search) match.invoiceNumber = { $regex: search, $options: 'i' };
     
     if (startDate || endDate) {
       match.invoiceDate = {};

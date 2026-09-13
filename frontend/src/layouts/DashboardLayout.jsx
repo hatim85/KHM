@@ -46,42 +46,55 @@ const DashboardLayout = () => {
   const navItems = [
     { label: 'Dashboard', path: '/', Icon: LayoutDashboardIcon },
     {
-      label: 'Sales',
+      label: 'SALES',
+      Icon: ReceiptIcon,
       children: [
         { label: 'Estimated Bills', path: '/sales/estimate', Icon: FileTextIcon },
         { label: 'Tax Invoices (GST)', path: '/sales/tax', Icon: ReceiptIcon },
-        { label: 'Returns', path: '/returns', Icon: UndoIcon },
+        { label: 'Sales Returns', path: '/returns?type=SALES_RETURN', Icon: UndoIcon },
       ],
-      Icon: ReceiptIcon,
     },
     {
-      label: 'Purchases',
+      label: 'PURCHASES',
+      Icon: ShoppingCartIcon,
       children: [
         { label: 'Purchase Bills', path: '/purchases', Icon: ShoppingCartIcon },
+        { label: 'Purchase Returns', path: '/returns?type=PURCHASE_RETURN', Icon: UndoIcon },
       ],
-      Icon: ShoppingCartIcon,
     },
     {
-      label: 'Inventory',
+      label: 'INVENTORY',
+      Icon: PackageIcon,
       children: [
         { label: 'Products', path: '/inventory', Icon: PackageIcon },
         { label: 'Stock Movements', path: '/inventory/movements', Icon: ClipboardListIcon },
         { label: 'Categories & Brands', path: '/inventory/master', Icon: TagIcon },
       ],
-      Icon: PackageIcon,
     },
-    { label: 'Customers', path: '/customers', Icon: UsersIcon },
-    { label: 'Suppliers', path: '/suppliers', Icon: FactoryIcon },
-    { label: 'Payments', path: '/payments', Icon: CreditCardIcon },
-    { label: 'Credit / Debit Notes', path: '/notes', Icon: FileTextIcon },
-    { label: 'Expenses', path: '/expenses', Icon: WalletIcon },
-    { label: 'Reports', path: '/reports', Icon: ChartIcon },
-    { label: 'Audit Logs', path: '/audit', Icon: ShieldCheckIcon },
-    { label: 'Settings', path: '/settings', Icon: SettingsIcon },
+    {
+      label: 'ACCOUNTS',
+      Icon: WalletIcon,
+      children: [
+        { label: 'Payments & Receipts', path: '/payments', Icon: CreditCardIcon },
+        { label: 'Credit / Debit Notes', path: '/notes', Icon: FileTextIcon },
+        { label: 'Expenses', path: '/expenses', Icon: WalletIcon },
+      ],
+    },
+    {
+      label: 'PARTIES',
+      Icon: UsersIcon,
+      children: [
+        { label: 'Customers', path: '/customers', Icon: UsersIcon },
+        { label: 'Suppliers', path: '/suppliers', Icon: FactoryIcon },
+      ],
+    },
+    { label: 'REPORTS', path: '/reports', Icon: ChartIcon },
+    { label: 'AUDIT LOGS', path: '/audit', Icon: ShieldCheckIcon },
+    { label: 'SETTINGS', path: '/settings', Icon: SettingsIcon },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
+    <div className="h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col">
       {/* Offline banner */}
       {!isOnline && (
         <div className="bg-amber-500 text-slate-950 px-4 py-1.5 text-xs font-bold text-center tracking-wide flex items-center justify-center gap-2">
@@ -155,29 +168,34 @@ const DashboardLayout = () => {
                 {item.children ? (
                   <div className="py-1">
                     {(sidebarOpen || mobileMenuOpen) && (
-                      <div className="px-3 py-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                        <item.Icon size={14} />
+                      <div className="px-3 py-1.5 mt-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
                         <span>{item.label}</span>
                       </div>
                     )}
                     <div className="space-y-0.5 mt-1">
-                      {item.children.map((sub, sIdx) => (
+                      {item.children.map((sub, sIdx) => {
+                        // Extract query parameter manually since NavLink doesn't match on query params automatically
+                        const [pathname, search] = sub.path.split('?');
+                        return (
                         <NavLink
                           key={sIdx}
                           to={sub.path}
-                          end={sub.path === '/inventory' || sub.path === '/purchases'}
-                          className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
-                              isActive
+                          end={pathname === '/inventory' || pathname === '/purchases' || pathname === '/sales'}
+                          className={({ isActive }) => {
+                            const isSearchActive = search ? location.search.includes(search) : true;
+                            const reallyActive = isActive && isSearchActive;
+                            return `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition ${
+                              reallyActive
                                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/60'
-                            }`
-                          }
+                            }`;
+                          }}
                         >
                           <sub.Icon size={16} className="shrink-0 opacity-80" />
                           {(sidebarOpen || mobileMenuOpen) && <span>{sub.label}</span>}
                         </NavLink>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
