@@ -39,7 +39,10 @@ const crudFactory = (Model, modelName = 'Document', populateFields = [], options
         let match = {};
 
         if (search) {
-          match.name = { $regex: search, $options: 'i' };
+          match.$or = [
+            { name: { $regex: search, $options: 'i' } },
+            { sku: { $regex: search, $options: 'i' } },
+          ];
         }
 
         if (isActive !== undefined) {

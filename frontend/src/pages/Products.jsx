@@ -1,22 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
-import { ClipboardListIcon, TagIcon, AlertTriangleIcon, CheckIcon, PlusIcon, XIcon } from '../components/icons';
+import { ClipboardListIcon, TagIcon, AlertTriangleIcon, CheckIcon, PlusIcon, XIcon, SearchIcon } from '../components/icons';
 import { productThunks, categoryThunks, brandThunks, unitThunks } from '../features/masterDataSlice';
 import { adjustStock, resetAdjustSuccess, fetchLowStock } from '../features/inventorySlice';
 import SearchableSelect from '../components/SearchableSelect';
+import Pagination from '../components/Pagination';
 
 const Products = () => {
   const dispatch = useDispatch();
-  const { data: products, loading: productsLoading } = useSelector((state) => state.masterData.products);
+  const { data: products, pagination, loading: productsLoading } = useSelector((state) => state.masterData.products);
   const { data: categories } = useSelector((state) => state.masterData.categories);
   const { data: brands } = useSelector((state) => state.masterData.brands);
   const { data: units } = useSelector((state) => state.masterData.units);
   const { lowStock, adjustLoading, adjustSuccess, error: inventoryError } = useSelector((state) => state.inventory);
   
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(15);
+  const [search, setSearch] = useState('');
+  const [showAllLowStock, setShowAllLowStock] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [adjustData, setAdjustData] = useState({ product: '', productName: '', stream: 'TAX', quantity: '', reason: '' });
   
   const [formData, setFormData] = useState({
@@ -38,7 +45,10 @@ const Products = () => {
   });
 
   useEffect(() => {
-    dispatch(productThunks.fetchAll());
+    dispatch(productThunks.fetchAll({ page, limit, search }));
+  }, [dispatch, page, limit, search]);
+
+  useEffect(() => {
     dispatch(categoryThunks.fetchAll());
     dispatch(brandThunks.fetchAll());
     dispatch(unitThunks.fetchAll());
@@ -48,12 +58,12 @@ const Products = () => {
   useEffect(() => {
     if (adjustSuccess) {
       setShowAdjustModal(false);
-      dispatch(productThunks.fetchAll());
+      dispatch(productThunks.fetchAll({ page, limit, search }));
       dispatch(fetchLowStock());
       const timer = setTimeout(() => dispatch(resetAdjustSuccess()), 3000);
       return () => clearTimeout(timer);
     }
-  }, [adjustSuccess, dispatch]);
+  }, [adjustSuccess, dispatch, page, limit, search]);
 
   const openModal = (product = null) => {
     if (product) {
@@ -92,6 +102,11 @@ const Products = () => {
     e.preventDefault();
     const submissionData = {
       ...formData,
+      // Optional refs: send null (not '') so backend ObjectId casting never fails.
+      category: formData.category || null,
+      brand: formData.brand || null,
+      secondaryUnit: formData.secondaryUnit || null,
+      pricingBasis: formData.secondaryUnit ? formData.pricingBasis : 'PRIMARY',
       purchasePrice: Math.round(parseFloat(formData.purchasePrice || 0) * 100),
       sellingPrice: Math.round(parseFloat(formData.sellingPrice || 0) * 100),
       gstRate: Number(formData.gstRate),
@@ -103,12 +118,19 @@ const Products = () => {
     } else {
       await dispatch(productThunks.create(submissionData));
     }
+    dispatch(productThunks.fetchAll({ page, limit, search }));
     closeModal();
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Archive this product instead of deleting? Deletion is blocked when history exists. Use Edit to deactivate. Delete only unreferenced items.')) {
-      await dispatch(productThunks.remove(id));
+    setDeleteError('');
+    if (window.confirm('Delete this product? This works only if it was never purchased or sold and its stock is zero. Otherwise use Edit to deactivate it instead.')) {
+      try {
+        await dispatch(productThunks.remove(id)).unwrap();
+        dispatch(productThunks.fetchAll({ page, limit, search }));
+      } catch (err) {
+        setDeleteError(typeof err === 'string' ? err : 'Delete failed. The product may have purchase/sale history — deactivate it instead.');
+      }
     }
   };
 
@@ -147,16 +169,35 @@ const Products = () => {
         </div>
       </div>
 
-      {/* Low Stock Alerts */}
+      {/* Low Stock Alerts — collapsed to a single line with View more/less */}
       {lowStock.length > 0 && (
         <div className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-rose-600 dark:text-rose-400"><AlertTriangleIcon size={18} /></span>
-            <h3 className="text-sm font-bold text-rose-600 dark:text-rose-300">Low Stock Alerts ({lowStock.length} items)</h3>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-rose-600 dark:text-rose-400"><AlertTriangleIcon size={18} /></span>
+              <h3 className="text-sm font-bold text-rose-600 dark:text-rose-300">Low Stock Alerts ({lowStock.length} items)</h3>
+            </div>
+            {lowStock.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowAllLowStock((v) => !v)}
+                className="shrink-0 text-xs font-semibold text-rose-600 dark:text-rose-300 hover:text-rose-500 dark:hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg px-3 py-1.5 transition"
+              >
+                {showAllLowStock ? 'Show less' : `View more (${lowStock.length})`}
+              </button>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div
+            className={
+              showAllLowStock
+                ? 'flex flex-wrap gap-2'
+                : 'flex flex-nowrap gap-2 overflow-hidden whitespace-nowrap'
+            }
+            style={showAllLowStock ? undefined : { maxHeight: '2.25rem' }}
+            title={showAllLowStock ? undefined : 'Click View more to see all low stock items'}
+          >
             {lowStock.map(item => (
-              <div key={item._id} className="bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-1.5 text-xs">
+              <div key={item._id} className="shrink-0 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-1.5 text-xs">
                 <span className="text-rose-600 dark:text-rose-300 font-medium">{item.name}</span>
                 <span className="text-rose-500 dark:text-rose-400/70 ml-2">
                   {item.totalStock} / {item.reorderLevel} {item.unitName}
@@ -167,8 +208,7 @@ const Products = () => {
         </div>
       )}
 
-      {/* Negative stock can only come from pre-guard history or a direct
-          write — new sales, returns and adjustments can no longer cause it. */}
+      {/* Negative stock warning */}
       {products.some((p) => ((p.taxStock ?? 0) + (p.estimateStock ?? 0)) < 0) && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex gap-3">
           <span className="text-rose-600 dark:text-rose-400 shrink-0 mt-0.5"><AlertTriangleIcon size={20} /></span>
@@ -190,8 +230,45 @@ const Products = () => {
         </div>
       )}
 
-      {/* Table — one column per attribute, no merged cells */}
-      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+      {deleteError && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between gap-3">
+          <p className="text-sm text-rose-600 dark:text-rose-400">{deleteError}</p>
+          <button onClick={() => setDeleteError('')} className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 shrink-0" title="Dismiss"><XIcon size={16} /></button>
+        </div>
+      )}
+
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900/60 p-4 border border-slate-200 dark:border-slate-800 rounded-2xl">
+        <div className="relative w-full sm:w-80">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+            <SearchIcon size={16} />
+          </span>
+          <input
+            type="text"
+            placeholder="Search by name or SKU..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium self-end sm:self-auto">
+          <span>Items per page:</span>
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-900 dark:text-white outline-none"
+          >
+            <option value={10}>10</option>
+            <option value={15}>15</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Table — one column per attribute */}
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse whitespace-nowrap min-w-[1550px]">
             <thead>
@@ -218,11 +295,11 @@ const Products = () => {
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800/50">
               {productsLoading && products.length === 0 ? (
                 <tr>
-                  <td colSpan="16" className="py-8 text-center text-slate-500 text-sm">Loading products...</td>
+                  <td colSpan="17" className="py-8 text-center text-slate-500 text-sm">Loading products...</td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan="16" className="py-8 text-center text-slate-500 text-sm">No products found.</td>
+                  <td colSpan="17" className="py-8 text-center text-slate-500 text-sm">No products found.</td>
                 </tr>
               ) : (
                 products.map((product) => {
@@ -279,6 +356,7 @@ const Products = () => {
             </tbody>
           </table>
         </div>
+        <Pagination pagination={pagination} onPageChange={(p) => setPage(p)} />
       </div>
 
       {/* Product Edit Modal */}

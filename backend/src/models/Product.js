@@ -29,10 +29,14 @@ const productSchema = new mongoose.Schema({
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
+    default: null,
+    set: (v) => (v === '' || !v ? null : v),
   },
   brand: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Brand',
+    default: null,
+    set: (v) => (v === '' || !v ? null : v),
   },
   unit: {
     type: mongoose.Schema.Types.ObjectId,
@@ -47,6 +51,7 @@ const productSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Unit',
     default: null,
+    set: (v) => (v === '' || !v ? null : v),
   },
   // Which unit the selling/purchase rate is quoted in.
   pricingBasis: {
@@ -113,23 +118,36 @@ const productSchema = new mongoose.Schema({
 
 // SECONDARY pricing is meaningless without a secondary unit.
 productSchema.pre('save', function () {
+  if (!this.secondaryUnit) {
+    this.secondaryUnit = null;
+    this.pricingBasis = 'PRIMARY';
+  }
   if (this.pricingBasis === 'SECONDARY' && !this.secondaryUnit) {
     throw new ApiError(400, 'Pricing basis SECONDARY requires a secondary unit.');
-  }
-  if (!this.secondaryUnit && this.pricingBasis !== 'PRIMARY') {
-    this.pricingBasis = 'PRIMARY';
   }
 });
 
 productSchema.pre('findOneAndUpdate', async function () {
   const update = this.getUpdate() || {};
   const set = update.$set || update;
+  // Normalize empty-string optional refs (form sends '' when unselected)
+  // to null so ObjectId casting never fails. secondaryUnit, brand and
+  // category are all optional.
+  for (const field of ['secondaryUnit', 'brand', 'category']) {
+    if (set[field] === '' || set[field] === undefined) {
+      if (set[field] === '') set[field] = null;
+    }
+  }
   if (set.pricingBasis === undefined && set.secondaryUnit === undefined) return;
   const doc = await this.model.findOne(this.getQuery()).lean();
   const basis = set.pricingBasis ?? doc?.pricingBasis ?? 'PRIMARY';
   const sec = set.secondaryUnit !== undefined ? set.secondaryUnit : doc?.secondaryUnit;
   if (basis === 'SECONDARY' && !sec) {
     throw new ApiError(400, 'Pricing basis SECONDARY requires a secondary unit.');
+  }
+  if (!sec && basis !== 'PRIMARY') {
+    if (update.$set) update.$set.pricingBasis = 'PRIMARY';
+    else update.pricingBasis = 'PRIMARY';
   }
 });
 

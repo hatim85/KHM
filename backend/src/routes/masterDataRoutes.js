@@ -1,8 +1,10 @@
 import express from 'express';
 const router = express.Router();
+import mongoose from 'mongoose';
 import crudFactory from '../utils/crudFactory.js';
 import { protect  } from '../middlewares/authMiddleware.js';
 import { getCustomerLedger, getSupplierLedger } from '../controllers/ledgerController.js';
+import { logAudit } from '../utils/auditLogger.js';
 
 import Customer from '../models/Customer.js';
 import Supplier from '../models/Supplier.js';
@@ -12,6 +14,7 @@ import Unit from '../models/Unit.js';
 import Product from '../models/Product.js';
 import Sale from '../models/Sale.js';
 import Purchase from '../models/Purchase.js';
+import Return from '../models/Return.js';
 import StockMovement from '../models/StockMovement.js';
 import CustomerLedger from '../models/CustomerLedger.js';
 import SupplierLedger from '../models/SupplierLedger.js';
@@ -41,6 +44,69 @@ const createRoutes = (controller, referenceChecks = []) => {
     .put(controller.update)
     .delete(blockReferencedDelete(referenceChecks), controller.remove);
   return r;
+};
+
+/**
+ * Product delete (§30, refined): a product that was never purchased or
+ * sold CAN be hard-deleted. Deletion is blocked only when real history
+ * exists — non-cancelled sale / purchase / return lines — or when stock
+ * is non-zero. Manual ADJUSTMENT ledger rows (e.g. opening corrections)
+ * are cleaned up in the same transaction since they are meaningless
+ * without the product itself.
+ */
+const deleteProduct = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const id = req.params.id;
+    // Cancelled bills are void (reports already exclude them), so only
+    // live history blocks deletion. Drafts count: the draft holds a
+    // dangling reference otherwise.
+    const liveHistory = { status: { $ne: 'CANCELLED' } };
+    const [saleCount, purchaseCount, returnCount] = await Promise.all([
+      Sale.countDocuments({ 'items.product': id, ...liveHistory }),
+      Purchase.countDocuments({ 'items.product': id, ...liveHistory }),
+      Return.countDocuments({ 'items.product': id }),
+    ]);
+    if (saleCount > 0) {
+      throw new ApiError(400, `Cannot delete: used in ${saleCount} sale bill(s) (drafts included). Remove it from those bills first, or Edit and deactivate the product instead.`);
+    }
+    if (purchaseCount > 0) {
+      throw new ApiError(400, `Cannot delete: used in ${purchaseCount} purchase bill(s) (drafts included). Remove it from those bills first, or Edit and deactivate the product instead.`);
+    }
+    if (returnCount > 0) {
+      throw new ApiError(400, `Cannot delete: referenced by ${returnCount} return document(s). Edit and deactivate the product instead to preserve history.`);
+    }
+
+    const product = await Product.findById(id).session(session);
+    if (!product) {
+      throw new ApiError(404, 'Product not found', 'NOT_FOUND');
+    }
+    const stock = (product.taxStock || 0) + (product.estimateStock || 0);
+    if (stock !== 0) {
+      throw new ApiError(400, `Cannot delete: stock is ${stock}. Adjust stock to zero first, or Edit and deactivate the product instead.`);
+    }
+
+    await StockMovement.deleteMany({ product: id }).session(session);
+    await Product.findByIdAndDelete(id).session(session);
+
+    await session.commitTransaction();
+    logAudit({
+      action: 'PRODUCT_DELETED',
+      entity: 'Product',
+      entityId: product._id,
+      userId: req.user?._id,
+      summary: `Product deleted: ${product.name || product._id}`,
+      metadata: { name: product.name },
+      ipAddress: req.ip,
+    });
+    res.json({ success: true, data: {} });
+  } catch (error) {
+    await session.abortTransaction();
+    next(error);
+  } finally {
+    session.endSession();
+  }
 };
 
 /**
@@ -95,10 +161,17 @@ router.use('/brands', createRoutes(brandController, [
 router.use('/units', createRoutes(unitController, [
   { model: Product, field: 'unit', label: 'product' },
 ]));
-router.use('/products', createRoutes(productController, [
-  { model: Sale, field: 'items.product', label: 'sale' },
-  { model: Purchase, field: 'items.product', label: 'purchase' },
-  { model: StockMovement, field: 'product', label: 'stock movement' },
-]));
+// Products use a dedicated delete handler (see deleteProduct above):
+// never-purchased/sold products can be hard-deleted; only real history
+// or non-zero stock blocks deletion.
+const productRoutes = express.Router();
+productRoutes.route('/')
+  .get(productController.getAll)
+  .post(productController.create);
+productRoutes.route('/:id')
+  .get(productController.getOne)
+  .put(productController.update)
+  .delete(deleteProduct);
+router.use('/products', productRoutes);
 
 export default router;
